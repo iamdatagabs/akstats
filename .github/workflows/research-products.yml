@@ -3,9 +3,10 @@ name: Build research products
 on:
   workflow_dispatch:
   push:
-    branches: [main, "engineering/**"]
+    branches: [main, "engineering/**", "data/**"]
     paths:
       - "src/**"
+      - "data/raw/**"
       - "pyproject.toml"
       - ".github/workflows/research-products.yml"
 

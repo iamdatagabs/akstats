@@ -15,6 +15,10 @@ from akstats.config import (
 
 LOGGER = logging.getLogger(__name__)
 
+# Original supplementary workbooks committed to data/raw/.
+PANEL_SOURCE_FILENAME = "41467_2025_65687_MOESM8_ESM.xlsx"
+VARIANTS_SOURCE_FILENAME = "41467_2025_65687_MOESM9_ESM.xlsx"
+
 
 def download_file(url: str, destination: Path, timeout: int = 90) -> Path:
     """Download atomically and reuse a non-empty local cache."""
@@ -46,9 +50,23 @@ def validate_mutation_columns(panel: pd.DataFrame, variants: pd.DataFrame) -> No
 
 
 def load_mutation_sources() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load the panel and mutation worksheet from the source article."""
-    panel_path = download_file(PANEL_URL, RAW_DIR / "gene_panel.xlsx")
-    variants_path = download_file(VARIANTS_URL, RAW_DIR / "somatic_variants.xlsx")
+    """Load committed NCBI/article supplementary files, downloading only as fallback."""
+    panel_source = RAW_DIR / PANEL_SOURCE_FILENAME
+    variants_source = RAW_DIR / VARIANTS_SOURCE_FILENAME
+
+    # Prefer the exact, version-controlled source workbooks. The URL/cache path
+    # remains a fallback for fresh clones that do not include the raw assets.
+    panel_path = (
+        panel_source if panel_source.is_file()
+        else download_file(PANEL_URL, RAW_DIR / "gene_panel.xlsx")
+    )
+    variants_path = (
+        variants_source if variants_source.is_file()
+        else download_file(VARIANTS_URL, RAW_DIR / "somatic_variants.xlsx")
+    )
+
+    LOGGER.info("Panel source: %s", panel_path.name)
+    LOGGER.info("Variant source: %s", variants_path.name)
     panel = pd.read_excel(panel_path, sheet_name=PANEL_SHEET, header=PANEL_HEADER_ROW)
     variants = pd.read_excel(variants_path, sheet_name=VARIANTS_SHEET, header=VARIANTS_HEADER_ROW)
     panel = panel.dropna(subset=["Gene"]).copy()
