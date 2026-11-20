@@ -19,8 +19,8 @@ The current public dataset does not provide individual-level age, sex, comorbidi
 
 ## Research team
 
-- **Gabriel Passos de Jesus** — research coordination, computational engineering, bioinformatics workflow, statistical analysis, and reproducible software. Background in Geography and Computer Science/Engineering, with current research interests at the intersection of data science and health.
-- **Student researcher / collaborator** — profile and contribution statement will be added after confirmation of the student's preferred public name, academic affiliation, role in the project, and approved biography/photo.
+- **Gabriel Passos de Jesus, MSc.** — orientador; Departamento de Medicina, Universidade Estadual de Maringá (UEM), Brasil. Research coordination, computational engineering, bioinformatics workflow, statistical analysis, and reproducible software. [Currículo Lattes](http://lattes.cnpq.br/9928924222649468).
+- **Giovanna Lyra** — pesquisadora; curso de graduação em Medicina, Universidade Santo Amaro (UNISA), Brasil. [Currículo Lattes](http://lattes.cnpq.br/8496468420504604).
 
 ## Research scope
 
