@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
+
 from akstats.analysis import (
-    cooccurrence_table, descriptive_maf, fisher_by_stage, prepare_axis,
+    cooccurrence_table,
+    descriptive_maf,
+    fisher_by_stage,
+    prepare_axis,
 )
 
 
