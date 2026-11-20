@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from akstats.analysis import (
     cooccurrence_table, descriptive_maf, fisher_by_stage, prepare_axis,
@@ -23,7 +24,7 @@ def test_axis_filtering_and_delta():
     panel, variants = fixtures()
     result = prepare_axis(panel, variants)
     assert set(result["Hugo_Symbol"]) == {"ARID2", "HRAS"}
-    assert result["Delta_MAF"].tolist() == [0.09, 0.21]
+    np.testing.assert_allclose(result["Delta_MAF"], [0.09, 0.21])
 
 
 def test_descriptive_summary_contains_each_stage():
