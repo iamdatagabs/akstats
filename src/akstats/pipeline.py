@@ -3,12 +3,17 @@ import json
 import logging
 
 from akstats.analysis import (
-    cooccurrence_table, descriptive_maf, fisher_by_stage, module_summary,
-    paired_stage_tests, prepare_axis,
+    cooccurrence_table,
+    descriptive_maf,
+    fisher_by_stage,
+    module_summary,
+    paired_stage_tests,
+    prepare_axis,
 )
 from akstats.config import OUTPUT_DIR, PROCESSED_DIR
 from akstats.data import load_mutation_sources
 from akstats.plots import save_figures
+from akstats.report import export_research_products
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,8 +36,12 @@ def run_pipeline() -> None:
         json.dumps(tests, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     figures = save_figures(axis, OUTPUT_DIR)
+    products = export_research_products(
+        OUTPUT_DIR, PROCESSED_DIR, panel, variants, axis, figures
+    )
     LOGGER.info("Panel genes: %d", panel["Gene"].nunique())
-    LOGGER.info("Raw variants: %d | filtered axis variants: %d | patients: %d",
-                len(variants), len(axis), variants["Case"].nunique())
-    LOGGER.info("Figures: %s", [str(path) for path in figures])
-    LOGGER.info("Outputs: %s", OUTPUT_DIR)
+    LOGGER.info(
+        "Raw variants: %d | filtered axis variants: %d | patients: %d",
+        len(variants), len(axis), variants["Case"].nunique(),
+    )
+    LOGGER.info("Research products: %s", [str(path) for path in products])
