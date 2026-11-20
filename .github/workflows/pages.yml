@@ -6,6 +6,8 @@ on:
       - "src/**"
       - "data/raw/**"
       - "docs/**"
+      - "index.html"
+      - "dashboard.html"
       - "scripts/build_pages_data.py"
       - "pyproject.toml"
       - ".github/workflows/pages.yml"
