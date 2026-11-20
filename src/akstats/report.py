@@ -26,8 +26,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
             frame.to_excel(writer, sheet_name=sheet[:31], index=False)
         pd.DataFrame([
             {"Metric": "Panel genes", "Value": int(panel["Gene"].nunique())},
-            {"Metric": "Source variant records", "Value": int(len(variants))},
-            {"Metric": "Filtered functional axis variants", "Value": int(len(axis))},
+            {"Metric": "Source variant records", "Value": len(variants)},
+            {"Metric": "Filtered functional axis variants", "Value": len(axis)},
             {"Metric": "Patients in source table", "Value": int(variants["Case"].nunique())},
         ]).to_excel(writer, sheet_name="Study overview", index=False)
 
@@ -81,8 +81,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "source_doi": "10.1038/s41467-025-65687-y",
         "source_files": ["MOESM8", "MOESM9"],
         "panel_gene_count": int(panel["Gene"].nunique()),
-        "source_variant_count": int(len(variants)),
-        "filtered_variant_count": int(len(axis)),
+        "source_variant_count": len(variants),
+        "filtered_variant_count": len(axis),
         "patient_count": int(variants["Case"].nunique()),
         "processed_dataset": "data/processed/arid2_mapk_variants.csv",
         "figures": [path.name for path in figures],
