@@ -77,10 +77,15 @@ def load_geo_series_matrix() -> tuple[pd.DataFrame, pd.DataFrame]:
                 metadata_lines.append(line)
     if not matrix_lines:
         raise ValueError("GEO series matrix has no expression table.")
-    parsed = {}
+    parsed: dict[str, list[str]] = {}
     for line in metadata_lines:
         fields = line.rstrip("\n").split("\t")
-        parsed[fields[0].lstrip("!")] = [value.strip('"') for value in fields[1:]]
+        key = fields[0].lstrip("!")
+        values = [value.strip('"') for value in fields[1:]]
+        if key in parsed:
+            parsed[key] = [f"{old}; {new}" for old, new in zip(parsed[key], values)]
+        else:
+            parsed[key] = values
     metadata = pd.DataFrame(parsed)
     if "Sample_geo_accession" not in metadata:
         raise ValueError("GEO metadata is missing Sample_geo_accession.")
