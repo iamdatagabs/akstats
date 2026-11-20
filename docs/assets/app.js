@@ -23,7 +23,7 @@ function drawMaf(){
 function drawDelta(){
  const rows=dashboard?.modules||[];
  if(deltaChart)deltaChart.destroy();
- deltaChart=new Chart($("delta-chart"),{type:"bar",data:{labels:rows.map(r=>String(r.Module||"").replace(/^\\d+\\. /,"")),datasets:[{label:"ΔMAF mediana (p.p.)",data:rows.map(r=>Number(r.median_delta_maf)*100),backgroundColor:"#879675",borderRadius:5}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} p.p.`}}},scales:{x:{title:{display:true,text:"Pontos percentuais"},grid:{color:"#eee8de"}},y:{grid:{display:false}}}}});
+ deltaChart=new Chart($("delta-chart"),{type:"bar",data:{labels:rows.map(r=>String(r.Module||"").replace(/^\d+\. /,"")),datasets:[{label:"ΔMAF mediana (p.p.)",data:rows.map(r=>Number(r.median_delta_maf)*100),backgroundColor:"#879675",borderRadius:5}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} p.p.`}}},scales:{x:{title:{display:true,text:"Pontos percentuais"},grid:{color:"#eee8de"}},y:{grid:{display:false}}}}});
 }
 function drawCooc(){
  const host=$("cooc-summary");host.replaceChildren();
@@ -33,14 +33,14 @@ function drawCooc(){
 function renderTable(rows){
  const body=$("maf-table");body.replaceChildren();
  if(!rows.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="4">Nenhum registro corresponde aos filtros atuais.</td>';body.append(tr);return;}
- rows.slice().sort((a,b)=>Number(b.median)-Number(a.median)).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${escapeHtml(stageNames[r.Stage]||r.Stage)}</td><td><span class="group-pill ${r.Biological_group==="ARID2"?"arid":"mapk"}">${escapeHtml(r.Biological_group)}</span></td><td>${escapeHtml(String(r.Module||"—").replace(/^\\d+\\. /,""))}</td><td class="numeric">${fmt(Number(r.median)*100)}%</td>`;body.append(tr);});
+ rows.slice().sort((a,b)=>Number(b.median)-Number(a.median)).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${escapeHtml(stageNames[r.Stage]||r.Stage)}</td><td><span class="group-pill ${r.Biological_group==="ARID2"?"arid":"mapk"}">${escapeHtml(r.Biological_group)}</span></td><td>${escapeHtml(String(r.Module||"—").replace(/^\d+\. /,""))}</td><td class="numeric">${fmt(Number(r.median)*100)}%</td>`;body.append(tr);});
 }
 function renderExplorer(){drawMaf();}
 function exportCsv(){
  const rows=filteredRows();if(!rows.length){showStatus("Não há registros para exportar com os filtros atuais.",true);return;}
  const headers=["Stage","Biological_group","Module","median"];
  const csv=[headers.join(";"),...rows.map(r=>headers.map(k=>String(r[k]??"").replace(/"/g,'""')).map(v=>`"${v}"`).join(";"))].join("\r\n");
- const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+ const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
  a.href=url;a.download="akstats-registros-filtrados.csv";a.click();URL.revokeObjectURL(url);
  showStatus(`Exportação preparada: ${rows.length} registro(s), respeitando os filtros ativos.`);
 }
@@ -60,7 +60,7 @@ async function init(){
  try{
   const response=await fetch(DATA_URL,{cache:"no-store"});if(!response.ok)throw new Error("Arquivo data/dashboard.json não encontrado. Execute o workflow de publicação dos dados.");
   dashboard=await response.json();fillKpis(dashboard.summary||{});
-  [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
+  [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\d+\. /,"");$("module-filter").append(option);});
   drawMaf();drawDelta();drawCooc();
   showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · fonte: suplementos do estudo publicado.`);
  }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message}`,true);$("result-count").textContent="Dados indisponíveis";$("maf-table").innerHTML='<tr><td colspan="4">Os registros aparecerão assim que o workflow publicar o dashboard.json.</td></tr>';}
