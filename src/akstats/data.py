@@ -1,5 +1,6 @@
 """Public data download, parsing, and schema validation."""
 from __future__ import annotations
+
 import gzip
 import logging
 from io import StringIO
@@ -9,8 +10,14 @@ import pandas as pd
 import requests
 
 from akstats.config import (
-    GEO_MATRIX_URL, PANEL_HEADER_ROW, PANEL_SHEET, RAW_DIR, VARIANTS_HEADER_ROW,
-    VARIANTS_SHEET, PANEL_URL, VARIANTS_URL,
+    GEO_MATRIX_URL,
+    PANEL_HEADER_ROW,
+    PANEL_SHEET,
+    PANEL_URL,
+    RAW_DIR,
+    VARIANTS_HEADER_ROW,
+    VARIANTS_SHEET,
+    VARIANTS_URL,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -32,12 +39,17 @@ def download_file(url: str, destination: Path, timeout: int = 90) -> Path:
 
 def validate_mutation_columns(panel: pd.DataFrame, variants: pd.DataFrame) -> None:
     required_panel = {"Gene"}
-    required_variants = {"Case", "Hugo_Symbol", "Variant_Classification",
-                         "Normal_MAF", "AK_MAF", "SCC_MAF"}
+    required_variants = {
+        "Case", "Hugo_Symbol", "Variant_Classification",
+        "Normal_MAF", "AK_MAF", "SCC_MAF",
+    }
     missing_panel = required_panel - set(panel.columns)
     missing_variants = required_variants - set(variants.columns)
     if missing_panel or missing_variants:
-        raise ValueError(f"Source schema mismatch: panel={sorted(missing_panel)}, variants={sorted(missing_variants)}")
+        raise ValueError(
+            f"Source schema mismatch: panel={sorted(missing_panel)}, "
+            f"variants={sorted(missing_variants)}"
+        )
     for column in ("Normal_MAF", "AK_MAF", "SCC_MAF"):
         variants[column] = pd.to_numeric(variants[column], errors="coerce")
         values = variants[column].dropna()
@@ -50,7 +62,9 @@ def load_mutation_sources() -> tuple[pd.DataFrame, pd.DataFrame]:
     panel_path = download_file(PANEL_URL, RAW_DIR / "gene_panel.xlsx")
     variants_path = download_file(VARIANTS_URL, RAW_DIR / "somatic_variants.xlsx")
     panel = pd.read_excel(panel_path, sheet_name=PANEL_SHEET, header=PANEL_HEADER_ROW)
-    variants = pd.read_excel(variants_path, sheet_name=VARIANTS_SHEET, header=VARIANTS_HEADER_ROW)
+    variants = pd.read_excel(
+        variants_path, sheet_name=VARIANTS_SHEET, header=VARIANTS_HEADER_ROW
+    )
     panel = panel.dropna(subset=["Gene"]).copy()
     variants = variants.dropna(subset=["Case", "Hugo_Symbol"]).copy()
     validate_mutation_columns(panel, variants)
