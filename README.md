@@ -6,12 +6,19 @@ AKStats converts the original Colab analysis into a modular Python package and p
 
 > **Research-use notice:** this repository is not a diagnostic tool, clinical decision-support system, or validated prognostic model. Results are exploratory and require interpretation alongside the source publication, study design, assay limitations, and independent biological evidence.
 
-## Research portal and interactive dashboard
+## Research portal
 
-The project portal is published through GitHub Pages:
+The AKStats portal is organized into two connected pages, published through GitHub Pages:
 
-- **Project overview:** https://iamdatagabs.github.io/akstats/
-- **Source code and reproducible pipeline:** https://github.com/iamdatagabs/akstats
+| Page | What you'll find | Link |
+|---|---|---|
+| **Project presentation** | Scientific question, research scope, analytical strategy, team, and project context. | [Open the landing page](https://iamdatagabs.github.io/akstats/) |
+| **Interactive dashboard** | Aggregate indicators, filters by tissue stage and pathway module, interactive charts, underlying records, and CSV export. | [Open the dashboard](https://iamdatagabs.github.io/akstats/dashboard.html) |
+
+The pages are connected through their navigation and calls to action: use **Explore the dashboard** to move from the presentation to the data explorer, or **Presentation / Know the project** to return to the research overview.
+
+- **Repository:** https://github.com/iamdatagabs/akstats
+- **GitHub Pages deployment:** https://github.com/iamdatagabs/akstats/actions
 
 The dashboard is generated from the research pipeline and presents aggregate indicators: panel size, source and filtered variant counts, patient counts, MAF summaries by tissue stage and biological group, pathway-module ΔMAF, and patient-level co-occurrence. The tissue stages (normal skin, AK, cSCC) are clinicopathological descriptors of the source cohort; they are not patient outcomes.
 
