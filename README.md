@@ -2,7 +2,7 @@
 
 **Reproducible exploratory bioinformatics analysis of the ARID2–MAPK axis across actinic keratosis (AK) and cutaneous squamous cell carcinoma (cSCC).**
 
-AKStats refactors the original Google Colab workflow into a modular Python package. It retrieves public supplementary mutation tables, validates source schemas, annotates functional variants, summarizes mutant allele fractions (MAF), evaluates patient-level co-occurrence, and exports tables and figures.
+AKStats converts the original Colab analysis into a modular Python package and produces a reproducible bundle of research outputs: CSV tables, high-resolution figures, an Excel workbook, and Markdown/HTML reports.
 
 > **Research-use notice:** this repository is not a diagnostic tool, clinical decision-support system, or validated prognostic model. Results are exploratory and require interpretation alongside the source publication, study design, assay limitations, and independent biological evidence.
 
@@ -25,59 +25,69 @@ The mutation workflow downloads supplementary Excel files associated with DOI 10
 
 Raw files are cached locally and are not committed. Consult the source article for cohort definitions, experimental methods, and data-use terms.
 
+## Quick start
+
+Python 3.10 or newer is required.
+
+```bash
+git clone https://github.com/iamdatagabs/akstats.git
+cd akstats
+python -m venv .venv
+# Linux/macOS: source .venv/bin/activate
+# Windows PowerShell: .venv\\Scripts\\Activate.ps1
+pip install -e ".[dev]"
+akstats
+```
+
+The first run requires internet access to retrieve the source files. Later runs reuse the local cache. Tests use synthetic fixtures and do not download research data:
+
+```bash
+pytest
+ruff check src tests
+```
+
+## Final products
+
+Running `akstats` creates:
+
+| Artifact | Purpose |
+|---|---|
+| `outputs/AKStats_research_results.xlsx` | Consolidated workbook with filtered variants, descriptive MAF, modules, co-occurrence, Fisher tests, and study overview |
+| `outputs/research_report.md` | Research report with dataset counts, tables, figures, provenance, and limitations |
+| `outputs/research_report.html` | Portable HTML version of the report |
+| `outputs/run_manifest.json` | Machine-readable record of source, run date, cohort counts, and outputs |
+| `outputs/maf_descriptive.csv` | Descriptive MAF statistics by group and stage |
+| `outputs/module_summary.csv` | MAF and ΔMAF summaries by pathway module |
+| `outputs/patient_cooccurrence.csv` | Patient-level ARID2/MAPK presence matrix |
+| `outputs/fisher_tests.csv` | Fisher exact tests by stage |
+| `outputs/maf_by_stage.png` | MAF distribution figure (300 dpi) |
+| `outputs/delta_maf_by_module.png` | ΔMAF distribution by pathway module (300 dpi) |
+| `data/processed/arid2_mapk_variants.csv` | Filtered and annotated variant records |
+
+### Download from GitHub Actions
+
+The **Build research products** workflow can be started manually from the Actions tab. It downloads the public supplementary tables, executes the pipeline, and publishes the generated files as a downloadable artifact named `AKStats-research-products` (30-day retention). It also runs automatically when relevant analysis code changes.
+
 ## Architecture
 
     akstats/
-    ├── .github/workflows/ci.yml
+    ├── .github/workflows/
+    │   ├── ci.yml
+    │   └── research-products.yml
     ├── data/raw/                 # Download cache; not versioned
-    ├── data/processed/            # Derived datasets; not versioned
-    ├── outputs/                   # Tables and figures; not versioned
+    ├── data/processed/           # Derived datasets; not versioned
+    ├── outputs/                  # Tables, figures and reports; not versioned
     ├── src/akstats/
     │   ├── analysis.py            # Transformations and statistical summaries
     │   ├── cli.py                 # Command-line interface
     │   ├── config.py              # Sources, thresholds, pathway definitions
     │   ├── data.py                # Download, parsing, schema validation
     │   ├── pipeline.py            # End-to-end orchestration
-    │   └── plots.py               # Figure generation
+    │   ├── plots.py               # Figure generation
+    │   └── report.py              # Excel, Markdown, HTML and manifest exports
     ├── tests/
     ├── Fonte.ipynb                # Original exploratory notebook
     └── pyproject.toml
-
-## Quick start
-
-Python 3.10 or newer is required.
-
-    git clone https://github.com/iamdatagabs/akstats.git
-    cd akstats
-    python -m venv .venv
-
-Activate the environment, then install and run:
-
-    # Linux/macOS
-    source .venv/bin/activate
-    # Windows PowerShell
-    .venv\Scripts\Activate.ps1
-
-    pip install -e ".[dev]"
-    akstats
-
-The first run requires internet access to retrieve the source files. Later runs reuse the local cache. Tests use synthetic fixtures and do not download research data:
-
-    pytest
-    ruff check src tests
-
-## Outputs
-
-| Artifact | Description |
-|---|---|
-| data/processed/arid2_mapk_variants.csv | Filtered and annotated variant records |
-| outputs/maf_descriptive.csv | Descriptive MAF statistics by group and stage |
-| outputs/module_summary.csv | MAF and ΔMAF summaries by pathway module |
-| outputs/patient_cooccurrence.csv | Patient-level ARID2/MAPK presence matrix |
-| outputs/fisher_tests.csv | Fisher exact tests by stage |
-| outputs/exploratory_tests.json | Exploratory Friedman and Wilcoxon results |
-| outputs/maf_by_stage.png | MAF distribution figure |
-| outputs/delta_maf_by_module.png | ΔMAF distribution by pathway module |
 
 ## Statistical interpretation and limitations
 
@@ -90,7 +100,7 @@ The first run requires internet access to retrieve the source files. Later runs 
 
 ## Original notebook
 
-The initial exploratory workflow remains preserved in Fonte.ipynb. The Python package is the maintainable implementation; notebook outputs should not be treated as the authoritative reproducibility record.
+The initial exploratory workflow remains preserved in `Fonte.ipynb`. The Python package is the maintainable implementation; notebook outputs should not be treated as the authoritative reproducibility record.
 
 ## Citation
 
