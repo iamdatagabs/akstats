@@ -1,0 +1,2 @@
+"""AKStats research software package."""
+__version__ = "0.1.0"
