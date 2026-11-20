@@ -45,6 +45,7 @@ function exportCsv(){
  showStatus(`Exportação preparada: ${rows.length} registro(s), respeitando os filtros ativos.`);
 }
 function setupInteractions(){
+ const menu=$("menu-toggle"),nav=$("main-nav");if(menu&&nav){menu.addEventListener("click",()=>{const open=nav.classList.toggle("open");menu.setAttribute("aria-expanded",String(open));menu.textContent=open?"×":"☰";});nav.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{nav.classList.remove("open");menu.setAttribute("aria-expanded","false");menu.textContent="☰";}));}
  ["stage-filter","module-filter"].forEach(id=>$(id).addEventListener("change",renderExplorer));
  $("gene-search").addEventListener("input",renderExplorer);
  $("reset-filters").addEventListener("click",()=>{$("stage-filter").value="all";$("module-filter").value="all";$("gene-search").value="";renderExplorer();});
