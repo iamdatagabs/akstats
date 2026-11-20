@@ -1,6 +1,7 @@
 """Command-line interface."""
 import argparse
 import logging
+
 from akstats.pipeline import run_pipeline
 
 

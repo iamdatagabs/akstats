@@ -36,9 +36,7 @@ def run_pipeline() -> None:
         json.dumps(tests, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     figures = save_figures(axis, OUTPUT_DIR)
-    products = export_research_products(
-        OUTPUT_DIR, PROCESSED_DIR, panel, variants, axis, figures
-    )
+    products = export_research_products(OUTPUT_DIR, panel, variants, axis, figures)
     LOGGER.info("Panel genes: %d", panel["Gene"].nunique())
     LOGGER.info(
         "Raw variants: %d | filtered axis variants: %d | patients: %d",
