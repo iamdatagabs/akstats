@@ -37,7 +37,7 @@ def run_pipeline() -> None:
     )
     figures = save_figures(axis, OUTPUT_DIR)
     products = export_research_products(
-        OUTPUT_DIR, PROCESSED_DIR, panel, variants, axis, figures
+        OUTPUT_DIR, panel, variants, axis, figures
     )
     LOGGER.info("Panel genes: %d", panel["Gene"].nunique())
     LOGGER.info(
