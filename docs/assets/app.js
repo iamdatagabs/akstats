@@ -27,7 +27,7 @@ async function init(){
   dashboard=await response.json();fillKpis(dashboard.summary);
   const modules=[...new Set(dashboard.maf.map(r=>r.Module).filter(Boolean))];modules.forEach(m=>{const o=document.createElement("option");o.value=m;o.textContent=m.replace(/^\d+\. /,"");$("module-filter").append(o);});
   drawMaf();drawDelta();drawCooc();showStatus(`Atualizado em ${new Date(dashboard.generated_at).toLocaleString("pt-BR")} · fonte: suplementos do estudo publicado.`);
-  $("stage-filter").addEventListener("change",drawMaf);$("module-filter").addEventListener("change",drawMaf);
+  $("stage-filter").addEventListener("change",drawMaf);
  }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message} Execute o workflow de publicação.`,true);}
 }
 init();
