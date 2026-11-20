@@ -6,6 +6,22 @@ AKStats converts the original Colab analysis into a modular Python package and p
 
 > **Research-use notice:** this repository is not a diagnostic tool, clinical decision-support system, or validated prognostic model. Results are exploratory and require interpretation alongside the source publication, study design, assay limitations, and independent biological evidence.
 
+## Research portal and interactive dashboard
+
+The project portal is published through GitHub Pages:
+
+- **Project overview:** https://iamdatagabs.github.io/akstats/
+- **Source code and reproducible pipeline:** https://github.com/iamdatagabs/akstats
+
+The dashboard is generated from the research pipeline and presents aggregate indicators: panel size, source and filtered variant counts, patient counts, MAF summaries by tissue stage and biological group, pathway-module ΔMAF, and patient-level co-occurrence. The tissue stages (normal skin, AK, cSCC) are clinicopathological descriptors of the source cohort; they are not patient outcomes.
+
+The current public dataset does not provide individual-level age, sex, comorbidities, treatment response, recurrence, survival, or other longitudinal clinical outcomes. The dashboard therefore does not label MAF or ΔMAF as clinical endpoints and must not be used for diagnosis, prognosis, or treatment decisions.
+
+## Research team
+
+- **Gabriel Passos de Jesus** — research coordination, computational engineering, bioinformatics workflow, statistical analysis, and reproducible software. Background in Geography and Computer Science/Engineering, with current research interests at the intersection of data science and health.
+- **Student researcher / collaborator** — profile and contribution statement will be added after confirmation of the student's preferred public name, academic affiliation, role in the project, and approved biography/photo.
+
 ## Research scope
 
 - Functional variants in ARID2 and a predefined set of MAPK pathway genes.
@@ -13,7 +29,7 @@ AKStats converts the original Colab analysis into a modular Python package and p
 - Variant-level change from AK to cSCC (ΔMAF).
 - Patient-level co-occurrence at a configurable 2% MAF threshold.
 - Exploratory non-parametric statistics and pathway-module summaries.
-- A GEO series-matrix parser for GSE158634. Probe IDs are retained as probes; gene-level interpretation requires documented platform annotation.
+- Preliminary GEO integration for GSE158634 is being re-scoped: this is an RNA-seq study in a UV-induced mouse model (20 samples; normal skin, AK and cSCC), associated with GPL18480 / Illumina HiSeq 1500. It is an independent animal cohort, not the human mutation cohort. The gene-count supplementary file must be parsed and its identifier type/genome annotation verified before gene-level differential-expression analysis. It must not be treated as a microarray probe dataset.
 
 ## Data provenance
 
@@ -23,7 +39,7 @@ The mutation workflow downloads supplementary Excel files associated with DOI 10
 - [Supplementary mutation table (MOESM9)](https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-025-65687-y/MediaObjects/41467_2025_65687_MOESM9_ESM.xlsx)
 - [NCBI GEO GSE158634](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE158634)
 
-Raw files are cached locally and are not committed. Consult the source article for cohort definitions, experimental methods, and data-use terms.
+Original MOESM8/MOESM9 workbooks are versioned under `data/raw/`; processed outputs are generated separately. GSE158634 is a distinct mouse RNA-seq experiment (20 samples; GPL18480, Illumina HiSeq 1500), so it can provide independent biological context but cannot be joined to the human patient records. Its supplementary count matrix and gene identifiers require validation before differential-expression inference. Consult the source article for cohort definitions, experimental methods, and data-use terms.
 
 ## Quick start
 
@@ -66,7 +82,7 @@ Running `akstats` creates:
 
 ### Download from GitHub Actions
 
-The **Build research products** workflow can be started manually from the Actions tab. It downloads the public supplementary tables, executes the pipeline, and publishes the generated files as a downloadable artifact named `AKStats-research-products` (30-day retention). It also runs automatically when relevant analysis code changes.
+The **Build research products** workflow can be started manually from the Actions tab. It executes the pipeline and publishes generated files as a downloadable artifact named `AKStats-research-products` (30-day retention). The **Publish research portal** workflow regenerates the aggregate dashboard dataset and deploys the static site to GitHub Pages whenever relevant code, data, or site files change.
 
 ## Architecture
 
