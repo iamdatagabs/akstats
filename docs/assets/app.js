@@ -1,5 +1,5 @@
 const DATA_URL = "data/dashboard.json";
-let dashboard = null, mafChart = null, deltaChart = null, patientMafChart = null, prevalenceChart = null, geoExpressionChart = null, chartMode = "bar";
+let dashboard = null, mafChart = null, deltaChart = null, patientMafChart = null, prevalenceChart = null, geoExpressionChart = null, geoQcChart = null, chartMode = "bar";
 const $ = (id) => document.getElementById(id);
 const stageNames = {Normal:"Pele normal",AK:"Queratose actínica",SCC:"Carcinoma espinocelular",cSCC:"Carcinoma espinocelular"};
 const fmt = (n,digits=2) => Number(n).toLocaleString("pt-BR",{maximumFractionDigits:digits});
@@ -66,7 +66,7 @@ function ensureTranscriptomicsSection(){
  section.innerHTML=`<div class="section-kicker">04 / EVIDÊNCIA TRANSCRIPTÔMICA INDEPENDENTE</div>
  <div class="dashboard-heading"><div><h2>Da mutação à <em>expressão gênica.</em></h2><p>Coorte murina independente GSE158634 · RNA-seq bulk · 20 amostras depositadas.</p></div><span class="live-tag">GEO / MUS MUSCULUS</span></div>
  <div id="geo-status" class="status">Aguardando validação da matriz de contagens…</div>
- <div class="chart-grid"><article class="chart-card wide"><div class="chart-title"><div><span>EXPRESSÃO RELATIVA</span><h3>Genes do eixo ARID2–MAPK e Rora</h3></div></div><canvas id="geo-expression-chart" height="190"></canvas><p class="metric-explanation">Expressão resumida como log2(CPM + 0,5), com mediana por estágio. CPM corrige pelo tamanho da biblioteca; não é expressão absoluta nem substitui normalização/modelagem de RNA-seq para inferência.</p></article></div>
+ <div class="chart-grid"><article class="chart-card"><div class="chart-title"><div><span>CONTROLE DE QUALIDADE</span><h3>Profundidade das bibliotecas</h3></div></div><canvas id="geo-qc-chart" height="280"></canvas><p class="metric-explanation">Total de contagens por amostra (milhões). Marcadores sinalizados têm menos de 50% da mediana de tamanho de biblioteca do próprio estágio. São alertas para revisão, não exclusões automáticas.</p></article><article class="chart-card"><div class="chart-title"><div><span>EXPRESSÃO RELATIVA</span><h3>Genes do eixo ARID2–MAPK e Rora</h3></div></div><canvas id="geo-expression-chart" height="190"></canvas><p class="metric-explanation">Expressão resumida como log2(CPM + 0,5), com mediana por estágio. CPM corrige pelo tamanho da biblioteca; não é expressão absoluta nem substitui normalização/modelagem de RNA-seq para inferência.</p></article></div>
  <article class="chart-card"><div class="chart-title"><div><span>CONTRASTES DESCRITIVOS</span><h3>Diferença entre medianas de expressão</h3></div></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Gene</th><th>Contraste</th><th>Δ mediana log2-CPM</th></tr></thead><tbody id="geo-contrasts-body"></tbody></table></div><p class="metric-explanation">Valores positivos indicam mediana maior no segundo estágio do contraste; negativos indicam menor. Não são log2 fold-changes modelados nem genes diferencialmente expressos.</p></article>
  <p class="data-note">A identificação individual dos animais não foi recuperada dos rótulos GEO. Por isso, esta camada não executa testes diferenciais, p-valores, enriquecimento funcional ou inferência sobre progressão individual. Os resultados humanos e murinos permanecem separados.</p>`;
  const anchor=document.querySelector(".team");(anchor||$("resultados")).before(section);
@@ -78,7 +78,7 @@ function drawTranscriptomics(){
  const details=status.validation_message?": "+status.validation_message:"";
  $("geo-status").textContent=`${label} · ${status.n_samples??0}/20 amostras · ${status.n_features??0} features · ${status.n_target_genes??0} genes-alvo${details}`;
  $("geo-status").classList.toggle("error",status.status==="validation_failed");
- const genes=["Arid2","Rora","Egfr","Kras","Braf","Mapk1","Map2k1"];
+ const qc=dashboard?.geo_sample_qc||[];\n if(geoQcChart)geoQcChart.destroy();\n geoQcChart=new Chart($("geo-qc-chart"),{type:"bar",data:{labels:qc.map(r=>r.sample_title),datasets:[{label:"Milhões de contagens",data:qc.map(r=>Number(r.library_size)/1e6),backgroundColor:qc.map(r=>r.qc_flag==="pass"?"#879675":"#b56b55"),borderRadius:3}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw,2)} milhões · ${qc[c.dataIndex]?.qc_flag==="pass"?"sem alerta":"revisar profundidade"}`}}},scales:{x:{beginAtZero:true,title:{display:true,text:"Milhões de contagens"}},y:{grid:{display:false}}}}});\n const genes=["Arid2","Rora","Egfr","Kras","Braf","Mapk1","Map2k1"];
  const available=genes.filter(g=>rows.some(r=>r.Gene===g));
  if(geoExpressionChart)geoExpressionChart.destroy();
  const stages=["Normal skin","Actinic keratosis","Cutaneous SCC"];
