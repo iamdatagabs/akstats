@@ -4,10 +4,10 @@ const $ = (id) => document.getElementById(id);
 const stageNames = {Normal:"Pele normal",AK:"Queratose actínica",SCC:"Carcinoma espinocelular",cSCC:"Carcinoma espinocelular"};
 const fmt = (n,digits=2) => Number(n).toLocaleString("pt-BR",{maximumFractionDigits:digits});
 const pct = (n) => `${fmt(Number(n)*100,1)}%`;
-const pFmt = (n) => Number.isFinite(Number(n)) ? (Number(n)<.001 ? "< 0,001" : fmt(n,3)) : "não estimável";
+const pFmt = (n) => n===null || n===undefined || n==="" || !Number.isFinite(Number(n)) ? "não estimável" : (Number(n)<.001 ? "< 0,001" : fmt(n,3));
 const escapeHtml = (s) => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function showStatus(message,error=false){const el=$("data-status");el.textContent=message;el.classList.toggle("error",error);}
-function fillKpis(s){$("kpi-genes").textContent=fmt(s.panel_genes??0,0);$("kpi-raw").textContent=fmt(s.source_variants??0,0);$("kpi-axis").textContent=fmt(s.axis_variants??0,0);$("kpi-patients").textContent=fmt(s.patients??0,0);}
+function fillKpis(s){$("kpi-genes").textContent=fmt(s.panel_genes??0,0);$("kpi-raw").textContent=fmt(s.source_variants??0,0);$("kpi-axis").textContent=fmt(s.axis_variants??0,0);$("kpi-patients").textContent=fmt(s.patients??0,0);const notes=["Número de genes contemplados no painel de sequenciamento; não representa genes alterados.","Registros de variantes na tabela suplementar antes do filtro funcional.","Variantes funcionais retidas no eixo ARID2–MAPK após a curadoria e o filtro do painel.","Indivíduos representados na tabela de origem; a unidade para as novas análises pareadas."];document.querySelectorAll(".kpi small").forEach((el,i)=>{if(notes[i])el.textContent=notes[i];});}
 function filteredRows(){
  if(!dashboard?.maf)return [];
  const stage=$("stage-filter").value,module=$("module-filter").value,query=$("gene-search").value.trim().toLocaleLowerCase("pt-BR");
@@ -18,14 +18,17 @@ function drawMaf(){
  const datasets=["ARID2","MAPK"].map((group,i)=>({label:group,data:stages.map(s=>{const item=rows.find(r=>r.Stage===s&&r.Biological_group===group);return item?Number(item.median)*100:null;}),backgroundColor:i?"#879675":"#a67c59",borderColor:i?"#526b4b":"#76543d",borderWidth:2,borderRadius:6,tension:.3,spanGaps:true}));
  if(mafChart)mafChart.destroy();
  mafChart=new Chart($("maf-chart"),{type:chartMode,data:{labels,datasets},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:c:`${c.dataset.label}: ${fmt(c.raw)}%`}}},scales:{y:{beginAtZero:true,title:{display:true,text:"MAF mediana (%)"},grid:{color:"#eee8de"}},x:{grid:{display:false}}},onClick:(event,elements)=>{if(!elements.length)return;$("stage-filter").value=stages[elements[0].index];renderExplorer();}}});
+ addChartNote("maf-chart","MAF é a fração de leituras com a variante. A mediana resume os registros de variantes por grupo e estágio; não equivale a tamanho clonal nem a desfecho clínico.");
  $("result-count").textContent=`${rows.length} registro(s) exibido(s) · ${new Set(rows.map(r=>r.Module)).size} módulo(s)`;
  renderTable(rows);
 }
+function addChartNote(canvasId,text){const canvas=$(canvasId);if(!canvas)return;const card=canvas.closest(".chart-card");if(!card||card.querySelector(".metric-explanation"))return;const note=document.createElement("p");note.className="metric-explanation";note.textContent=text;card.append(note);}
 function drawDelta(){
  const rows=dashboard?.modules||[];if(deltaChart)deltaChart.destroy();
  deltaChart=new Chart($("delta-chart"),{type:"bar",data:{labels:rows.map(r=>String(r.Module||"").replace(/^\\d+\\. /,"")),datasets:[{label:"ΔMAF mediana (p.p.)",data:rows.map(r=>Number(r.median_delta_maf)*100),backgroundColor:"#879675",borderRadius:5}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c:`${fmt(c.raw)} pontos percentuais`}}},scales:{x:{title:{display:true,text:"Pontos percentuais"},grid:{color:"#eee8de"}},y:{grid:{display:false}}}}});
 }
 function drawCooc(){
+ addChartNote("delta-chart","ΔMAF = MAF em cSCC menos MAF em AK. Valores positivos indicam fração alélica observada maior em cSCC; negativos indicam menor. Não demonstram expansão clonal.");
  const host=$("cooc-summary");host.replaceChildren();
  (dashboard?.fisher||[]).forEach(r=>{const row=document.createElement("div");row.className="cooc-row";row.innerHTML=`<span>${escapeHtml(stageNames[r.stage]||r.stage)}</span><b>${fmt(r.both_present,0)} / ${fmt((r.both_present||0)+(r.arid2_only||0)+(r.mapk_only||0)+(r.neither||0),0)} pacientes</b>`;host.append(row);
  const note=document.createElement("p");note.className="metric-explanation";note.textContent=`Coocorrência observada: ${fmt(r.both_present,0)} pacientes com alterações ARID2 e MAPK acima de 2% no mesmo estágio. A tabela 2×2 e o teste exato de Fisher descrevem associação, não interação causal.`;host.append(note);});
