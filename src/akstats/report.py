@@ -19,6 +19,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "Pathway modules": pd.read_csv(output_dir / "module_summary.csv"),
         "Patient cooccurrence": pd.read_csv(output_dir / "patient_cooccurrence.csv"),
         "Fisher tests": pd.read_csv(output_dir / "fisher_tests.csv"),
+        "Patient-level summary": pd.read_csv(output_dir / "patient_level_summary.csv"),
+        "Patient-level tests": pd.read_csv(output_dir / "patient_level_tests.csv"),
     }
     workbook = output_dir / "AKStats_research_results.xlsx"
     with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
