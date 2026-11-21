@@ -26,6 +26,8 @@ def main() -> None:
     maf = records("maf_descriptive.csv")
     modules = records("module_summary.csv")
     fisher = records("fisher_tests.csv")
+    patient_metrics = records("patient_level_summary.csv")
+    patient_tests = records("patient_level_tests.csv")
     # Module labels are assigned from the variant-level descriptive summaries.
     axis = pd.read_csv(ROOT / "data" / "processed" / "arid2_mapk_variants.csv")
     module_map = axis[["Biological_group", "Module"]].drop_duplicates()
@@ -44,6 +46,8 @@ def main() -> None:
         "maf": maf,
         "modules": modules,
         "fisher": fisher,
+        "patient_metrics": patient_metrics,
+        "patient_tests": patient_tests,
         "data_notice": "Aggregate exploratory molecular summaries; no individual clinical records or diagnostic outputs.",
     }
     DESTINATION.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
