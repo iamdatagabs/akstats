@@ -38,7 +38,8 @@ SAMPLES = {
     "GSM4804812": ("cSCC_020", "Cutaneous SCC"),
     "GSM4804813": ("cSCC_021", "Cutaneous SCC"),
 }
-TARGETS = {**GENE_TO_MODULE, "Rora": "Literature candidate"}
+TARGETS = {gene[0] + gene[1:].lower(): module for gene, module in GENE_TO_MODULE.items()}
+TARGETS["Rora"] = "Literature candidate"
 
 
 def _download_counts(destination: Path) -> Path:
