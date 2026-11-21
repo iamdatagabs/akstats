@@ -109,8 +109,8 @@ function setupInteractions(){
  window.addEventListener("scroll",()=> $("to-top").classList.toggle("visible",window.scrollY>600),{passive:true});
 }
 async function init(){
- setupInteractions();
  try{
+  setupInteractions();
   const response=await fetch(DATA_URL,{cache:"no-store"});if(!response.ok)throw new Error("Arquivo data/dashboard.json não encontrado. Execute o workflow de publicação dos dados.");
   dashboard=await response.json();fillKpis(dashboard.summary||{});
   [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
