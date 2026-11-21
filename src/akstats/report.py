@@ -35,6 +35,7 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
 
     descriptive, modules = tables["MAF descriptive"], tables["Pathway modules"]
     cooc, fisher = tables["Patient cooccurrence"], tables["Fisher tests"]
+    patient_summary, patient_tests = tables["Patient-level summary"], tables["Patient-level tests"]
     lines = [
         "# AKStats — research results", "",
         f"Generated (UTC): {datetime.now(timezone.utc).isoformat(timespec='seconds')}", "",
@@ -46,6 +47,11 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "## Descriptive MAF summary", "", descriptive.to_markdown(index=False), "",
         "## Pathway-module summary", "",
         modules.to_markdown(index=False) if not modules.empty else "No module-level records.", "",
+        "## Patient-level molecular summary", "",
+        patient_summary.to_markdown(index=False), "",
+        "The patient-level MAF measure is the maximum variant MAF observed within each patient, group and stage. Patients without an eligible variant are represented as zero in the filtered dataset; this does not mean a biological MAF measurement of zero.", "",
+        "## Patient-level paired tests", "", patient_tests.to_markdown(index=False), "",
+        "Friedman compares the three paired tissue stages; Wilcoxon compares AK with cSCC; exact McNemar compares threshold-positive status. These analyses are exploratory and do not establish clinical utility.", "",
         "## Patient-level co-occurrence", "",
         f"Patients in co-occurrence matrix: **{len(cooc)}**", "", cooc.to_markdown(index=False), "",
         "## Fisher exact tests", "", fisher.to_markdown(index=False), "", "## Figures", "",
