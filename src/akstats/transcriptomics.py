@@ -185,7 +185,7 @@ def run_transcriptomics(output_dir: Path) -> dict:
             "n_features": int(counts.shape[0]),
             "identifier_type": "gene_symbol" if len(summary) else "unresolved",
             "n_target_genes": int(summary["Gene"].nunique()) if len(summary) else 0,
-            "n_library_qc_rows": int(len(qc)),
+            "n_library_qc_rows": len(qc),
         })
     except (OSError, ValueError, KeyError, ImportError) as exc:
         LOGGER.warning("GSE158634 layer was not integrated: %s", exc)
