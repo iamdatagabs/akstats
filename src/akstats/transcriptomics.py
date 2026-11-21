@@ -107,6 +107,9 @@ def summarize_geo_counts(counts: pd.DataFrame, metadata: pd.DataFrame) -> tuple[
     qc = metadata.copy()
     qc["library_size"] = qc["sample_accession"].map(library_sizes).astype(int)
     qc["detected_features"] = qc["sample_accession"].map((counts > 0).sum()).astype(int)
+    stage_medians = qc.groupby("stage")["library_size"].transform("median")
+    qc["library_size_ratio_to_stage_median"] = qc["library_size"] / stage_medians
+    qc["qc_flag"] = np.where(qc["library_size_ratio_to_stage_median"] < 0.5, "review_low_library_size", "pass")
 
     canonical = {str(gene).casefold(): gene for gene in TARGETS}
     matches = {feature: canonical[feature.casefold()] for feature in log_cpm.index
@@ -186,12 +189,13 @@ def run_transcriptomics(output_dir: Path) -> dict:
             "identifier_type": "gene_symbol" if len(summary) else "unresolved",
             "n_target_genes": int(summary["Gene"].nunique()) if len(summary) else 0,
             "n_library_qc_rows": len(qc),
+            "n_qc_flagged": int(qc["qc_flag"].ne("pass").sum()),
         })
     except (OSError, ValueError, KeyError, ImportError) as exc:
         LOGGER.warning("GSE158634 layer was not integrated: %s", exc)
         status["status"] = "validation_failed"
         status["validation_message"] = str(exc)
-        pd.DataFrame(columns=["sample_accession", "sample_title", "stage", "animal_id", "experimental_unit_note", "library_size", "detected_features"]).to_csv(output_dir / "geo_sample_qc.csv", index=False)
+        pd.DataFrame(columns=["sample_accession", "sample_title", "stage", "animal_id", "experimental_unit_note", "library_size", "detected_features", "library_size_ratio_to_stage_median", "qc_flag"]).to_csv(output_dir / "geo_sample_qc.csv", index=False)
     (output_dir / "geo_transcriptomics_status.json").write_text(
         json.dumps(status, indent=2, ensure_ascii=False), encoding="utf-8"
     )
