@@ -1,9 +1,11 @@
 const DATA_URL = "data/dashboard.json";
-let dashboard = null, mafChart = null, deltaChart = null, chartMode = "bar";
+let dashboard = null, mafChart = null, deltaChart = null, patientMafChart = null, prevalenceChart = null, chartMode = "bar";
 const $ = (id) => document.getElementById(id);
-const stageNames = {Normal:"Pele normal",AK:"Queratose actínica",SCC:"Carcinoma espinocelular"};
-const fmt = (n, digits=2) => Number(n).toLocaleString("pt-BR",{maximumFractionDigits:digits});
-const escapeHtml = (s) => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const stageNames = {Normal:"Pele normal",AK:"Queratose actínica",SCC:"Carcinoma espinocelular",cSCC:"Carcinoma espinocelular"};
+const fmt = (n,digits=2) => Number(n).toLocaleString("pt-BR",{maximumFractionDigits:digits});
+const pct = (n) => `${fmt(Number(n)*100,1)}%`;
+const pFmt = (n) => Number.isFinite(Number(n)) ? (Number(n)<.001 ? "< 0,001" : fmt(n,3)) : "não estimável";
+const escapeHtml = (s) => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function showStatus(message,error=false){const el=$("data-status");el.textContent=message;el.classList.toggle("error",error);}
 function fillKpis(s){$("kpi-genes").textContent=fmt(s.panel_genes??0,0);$("kpi-raw").textContent=fmt(s.source_variants??0,0);$("kpi-axis").textContent=fmt(s.axis_variants??0,0);$("kpi-patients").textContent=fmt(s.patients??0,0);}
 function filteredRows(){
@@ -12,46 +14,63 @@ function filteredRows(){
  return dashboard.maf.filter(r=>(stage==="all"||r.Stage===stage)&&(module==="all"||r.Module===module)&&(!query||[r.Module,r.Biological_group,r.Stage].join(" ").toLocaleLowerCase("pt-BR").includes(query)));
 }
 function drawMaf(){
- const rows=filteredRows(), stages=[...new Set(rows.map(r=>r.Stage))];
- const labels=stages.map(s=>stageNames[s]||s);
+ const rows=filteredRows(),stages=[...new Set(rows.map(r=>r.Stage))],labels=stages.map(s=>stageNames[s]||s);
  const datasets=["ARID2","MAPK"].map((group,i)=>({label:group,data:stages.map(s=>{const item=rows.find(r=>r.Stage===s&&r.Biological_group===group);return item?Number(item.median)*100:null;}),backgroundColor:i?"#879675":"#a67c59",borderColor:i?"#526b4b":"#76543d",borderWidth:2,borderRadius:6,tension:.3,spanGaps:true}));
  if(mafChart)mafChart.destroy();
- mafChart=new Chart($("maf-chart"),{type:chartMode,data:{labels,datasets},options:{responsive:true,maintainAspectRatio:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom",labels:{usePointStyle:true,padding:20}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt(c.raw)}%`}}},scales:{y:{beginAtZero:true,title:{display:true,text:"MAF mediana (%)"},grid:{color:"#eee8de"}},x:{grid:{display:false}}},onClick:(event,elements)=>{if(!elements.length)return;const stage=stages[elements[0].index];$("stage-filter").value=stage;renderExplorer();}}});
+ mafChart=new Chart($("maf-chart"),{type:chartMode,data:{labels,datasets},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:c:`${c.dataset.label}: ${fmt(c.raw)}%`}}},scales:{y:{beginAtZero:true,title:{display:true,text:"MAF mediana (%)"},grid:{color:"#eee8de"}},x:{grid:{display:false}}},onClick:(event,elements)=>{if(!elements.length)return;$("stage-filter").value=stages[elements[0].index];renderExplorer();}}});
  $("result-count").textContent=`${rows.length} registro(s) exibido(s) · ${new Set(rows.map(r=>r.Module)).size} módulo(s)`;
  renderTable(rows);
 }
 function drawDelta(){
- const rows=dashboard?.modules||[];
- if(deltaChart)deltaChart.destroy();
- deltaChart=new Chart($("delta-chart"),{type:"bar",data:{labels:rows.map(r=>String(r.Module||"").replace(/^\d+\. /,"")),datasets:[{label:"ΔMAF mediana (p.p.)",data:rows.map(r=>Number(r.median_delta_maf)*100),backgroundColor:"#879675",borderRadius:5}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} p.p.`}}},scales:{x:{title:{display:true,text:"Pontos percentuais"},grid:{color:"#eee8de"}},y:{grid:{display:false}}}}});
+ const rows=dashboard?.modules||[];if(deltaChart)deltaChart.destroy();
+ deltaChart=new Chart($("delta-chart"),{type:"bar",data:{labels:rows.map(r=>String(r.Module||"").replace(/^\\d+\\. /,"")),datasets:[{label:"ΔMAF mediana (p.p.)",data:rows.map(r=>Number(r.median_delta_maf)*100),backgroundColor:"#879675",borderRadius:5}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c:`${fmt(c.raw)} pontos percentuais`}}},scales:{x:{title:{display:true,text:"Pontos percentuais"},grid:{color:"#eee8de"}},y:{grid:{display:false}}}}});
 }
 function drawCooc(){
  const host=$("cooc-summary");host.replaceChildren();
- (dashboard?.fisher||[]).forEach(r=>{const row=document.createElement("div");row.className="cooc-row";const label=document.createElement("span");label.textContent=stageNames[r.stage]||r.stage;const value=document.createElement("b");value.textContent=`${fmt(r.both_present,0)} pacientes com ARID2 + MAPK`;row.append(label,value);host.append(row);});
+ (dashboard?.fisher||[]).forEach(r=>{const row=document.createElement("div");row.className="cooc-row";row.innerHTML=`<span>${escapeHtml(stageNames[r.stage]||r.stage)}</span><b>${fmt(r.both_present,0)} / ${fmt((r.both_present||0)+(r.arid2_only||0)+(r.mapk_only||0)+(r.neither||0),0)} pacientes</b>`;host.append(row);
+ const note=document.createElement("p");note.className="metric-explanation";note.textContent=`Coocorrência observada: ${fmt(r.both_present,0)} pacientes com alterações ARID2 e MAPK acima de 2% no mesmo estágio. A tabela 2×2 e o teste exato de Fisher descrevem associação, não interação causal.`;host.append(note);});
  if(!host.children.length)host.textContent="Sem registros de coocorrência disponíveis.";
 }
 function renderTable(rows){
  const body=$("maf-table");body.replaceChildren();
  if(!rows.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="4">Nenhum registro corresponde aos filtros atuais.</td>';body.append(tr);return;}
- rows.slice().sort((a,b)=>Number(b.median)-Number(a.median)).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${escapeHtml(stageNames[r.Stage]||r.Stage)}</td><td><span class="group-pill ${r.Biological_group==="ARID2"?"arid":"mapk"}">${escapeHtml(r.Biological_group)}</span></td><td>${escapeHtml(String(r.Module||"—").replace(/^\d+\. /,""))}</td><td class="numeric">${fmt(Number(r.median)*100)}%</td>`;body.append(tr);});
+ rows.slice().sort((a,b)=>Number(b.median)-Number(a.median)).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${escapeHtml(stageNames[r.Stage]||r.Stage)}</td><td><span class="group-pill ${r.Biological_group==="ARID2"?"arid":"mapk"}">${escapeHtml(r.Biological_group)}</span></td><td>${escapeHtml(String(r.Module||"—").replace(/^\\d+\\. /,""))}</td><td class="numeric">${pct(r.median)}</td>`;body.append(tr);});
+}
+function ensurePatientSection(){
+ if($("patient-analysis"))return;
+ const section=document.createElement("section");section.id="patient-analysis";section.className="patient-analysis";
+ section.innerHTML=`<div class="patient-heading"><div><span class="eyebrow">ANÁLISE POR UNIDADE BIOLÓGICA</span><h3>Métricas no nível do <em>paciente.</em></h3><p>Agregação por paciente evita tratar variantes repetidas do mesmo indivíduo como observações independentes.</p></div><span class="live-tag">n = pacientes</span></div>
+ <div class="patient-chart-grid"><article class="chart-card"><div class="chart-title"><div><span>MAF AGREGADA</span><h3>Mediana da MAF máxima por paciente</h3></div></div><canvas id="patient-maf-chart" height="170"></canvas><p class="metric-explanation">Para cada paciente, grupo e estágio, considera-se a maior MAF entre as variantes funcionais observadas. A mediana resume a distribuição entre pacientes; ausência de variante elegível é codificada como zero observado no conjunto filtrado.</p></article>
+ <article class="chart-card"><div class="chart-title"><div><span>PREVALÊNCIA MOLECULAR</span><h3>Pacientes acima do limiar de 2%</h3></div></div><canvas id="prevalence-chart" height="170"></canvas><p class="metric-explanation">Percentual de pacientes com ao menos uma variante do grupo com MAF ≥ 2%. As barras de erro representam IC 95% de Wilson, apropriado para proporções em amostras pequenas; o limiar é operacional, não clínico.</p></article></div>
+ <article class="chart-card patient-tests"><div class="chart-title"><div><span>TESTES PAREADOS</span><h3>Variação entre AK e cSCC</h3></div></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Grupo</th><th>n</th><th>Friedman p</th><th>Wilcoxon p</th><th>Ganho / perda</th><th>McNemar exato p</th></tr></thead><tbody id="patient-tests-body"></tbody></table></div><p class="metric-explanation">Friedman compara os três estágios de forma pareada; Wilcoxon compara AK e cSCC; McNemar exato avalia mudanças na presença acima de 2%. São análises exploratórias, com baixa precisão esperada em uma coorte de 16 pacientes. p-valor não mede magnitude nem relevância biológica.</p></article></section>`;
+ $("maf-table").closest(".data-table-card").before(section);
+}
+function drawPatientMetrics(){
+ ensurePatientSection();
+ const rows=dashboard?.patient_metrics||[],groups=["ARID2","MAPK"],stages=["Normal","AK","cSCC"];
+ const selected=(g,s)=>rows.find(r=>r.Biological_group===g&&r.Stage===s);
+ if(patientMafChart)patientMafChart.destroy();
+ patientMafChart=new Chart($("patient-maf-chart"),{type:"line",data:{labels:stages.map(s=>stageNames[s]),datasets:groups.map((g,i)=>({label:g,data:stages.map(s=>{const r=selected(g,s);return r?Number(r.median_patient_max_maf)*100:0;}),borderColor:i?"#526b4b":"#76543d",backgroundColor:i?"#879675":"#a67c59",tension:.25,pointRadius:4}))},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:c:`${c.dataset.label}: ${fmt(c.raw)}%`}}},scales:{y:{beginAtZero:true,title:{display:true,text:"MAF máxima mediana (%)"}}}}});
+ if(prevalenceChart)prevalenceChart.destroy();
+ prevalenceChart=new Chart($("prevalence-chart"),{type:"bar",data:{labels:stages.map(s=>stageNames[s]),datasets:groups.map((g,i)=>({label:g,data:stages.map(s=>{const r=selected(g,s);return r?Number(r.prevalence)*100:0;}),backgroundColor:i?"#879675":"#a67c59",borderRadius:4}))},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:c=>{const r=selected(groups[c.datasetIndex],stages[c.dataIndex]);return `${c.dataset.label}: ${fmt(c.raw,1)}% (IC95% ${fmt(Number(r?.prevalence_ci_low)*100,1)}–${fmt(Number(r?.prevalence_ci_high)*100,1)}%)`;}}}},scales:{y:{beginAtZero:true,max:100,title:{display:true,text:"Pacientes (%)"}}}}});
+ const body=$("patient-tests-body");body.replaceChildren();
+ (dashboard?.patient_tests||[]).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td><b>${escapeHtml(r.Biological_group)}</b></td><td class="numeric">${fmt(r.n_patients,0)}</td><td class="numeric">${pFmt(r.friedman_p)}</td><td class="numeric">${pFmt(r.wilcoxon_p)}</td><td class="numeric">${fmt(r.presence_gained_AK_to_cSCC,0)} / ${fmt(r.presence_lost_AK_to_cSCC,0)}</td><td class="numeric">${pFmt(r.mcnemar_exact_p)}</td>`;body.append(tr);});
+ if(!body.children.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="6">Métricas por paciente ainda não disponíveis.</td>';body.append(tr);}
 }
 function renderExplorer(){drawMaf();}
 function exportCsv(){
  const rows=filteredRows();if(!rows.length){showStatus("Não há registros para exportar com os filtros atuais.",true);return;}
  const headers=["Stage","Biological_group","Module","median"];
- const csv=[headers.join(";"),...rows.map(r=>headers.map(k=>String(r[k]??"").replace(/"/g,'""')).map(v=>`"${v}"`).join(";"))].join("\r\n");
- const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");
- a.href=url;a.download="akstats-registros-filtrados.csv";a.click();URL.revokeObjectURL(url);
+ const csv=[headers.join(";"),...rows.map(r=>headers.map(k=>String(r[k]??"").replace(/"/g,'""')).map(v=>`"${v}"`).join(";"))].join("\\r\\n");
+ const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="akstats-registros-filtrados.csv";a.click();URL.revokeObjectURL(url);
  showStatus(`Exportação preparada: ${rows.length} registro(s), respeitando os filtros ativos.`);
 }
 function setupInteractions(){
  const menu=$("menu-toggle"),nav=$("main-nav");if(menu&&nav){menu.addEventListener("click",()=>{const open=nav.classList.toggle("open");menu.setAttribute("aria-expanded",String(open));menu.textContent=open?"×":"☰";});nav.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{nav.classList.remove("open");menu.setAttribute("aria-expanded","false");menu.textContent="☰";}));}
- ["stage-filter","module-filter"].forEach(id=>$(id).addEventListener("change",renderExplorer));
- $("gene-search").addEventListener("input",renderExplorer);
+ ["stage-filter","module-filter"].forEach(id=>$(id).addEventListener("change",renderExplorer));$("gene-search").addEventListener("input",renderExplorer);
  $("reset-filters").addEventListener("click",()=>{$("stage-filter").value="all";$("module-filter").value="all";$("gene-search").value="";renderExplorer();});
  $("chart-toggle").addEventListener("click",()=>{chartMode=chartMode==="bar"?"line":"bar";$("chart-toggle").setAttribute("aria-pressed",String(chartMode==="line"));$("chart-toggle").textContent=chartMode==="line"?"Visualização em linha":"Visualização em barras";drawMaf();});
- $("export-csv").addEventListener("click",exportCsv);
- $("to-top").addEventListener("click",()=>window.scrollTo({top:0,behavior:"smooth"}));
+ $("export-csv").addEventListener("click",exportCsv);$("to-top").addEventListener("click",()=>window.scrollTo({top:0,behavior:"smooth"}));
  const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add("is-visible");observer.unobserve(e.target);}}),{threshold:.12});
  document.querySelectorAll(".section,.stats-strip,.closing").forEach(el=>{el.classList.add("reveal");observer.observe(el);});
  window.addEventListener("scroll",()=> $("to-top").classList.toggle("visible",window.scrollY>600),{passive:true});
@@ -61,9 +80,9 @@ async function init(){
  try{
   const response=await fetch(DATA_URL,{cache:"no-store"});if(!response.ok)throw new Error("Arquivo data/dashboard.json não encontrado. Execute o workflow de publicação dos dados.");
   dashboard=await response.json();fillKpis(dashboard.summary||{});
-  [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\d+\. /,"");$("module-filter").append(option);});
-  drawMaf();drawDelta();drawCooc();
-  showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · fonte: suplementos do estudo publicado.`);
+  [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
+  drawMaf();drawDelta();drawCooc();drawPatientMetrics();
+  showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · dados agregados do estudo publicado.`);
  }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message}`,true);$("result-count").textContent="Dados indisponíveis";$("maf-table").innerHTML='<tr><td colspan="4">Os registros aparecerão assim que o workflow publicar o dashboard.json.</td></tr>';}
 }
 init();
