@@ -12,8 +12,8 @@ from akstats.analysis import (
 )
 from akstats.config import OUTPUT_DIR, PROCESSED_DIR
 from akstats.data import load_mutation_sources
-from akstats.plots import save_figures
 from akstats.patient_metrics import patient_level_maf, patient_level_summary, patient_level_tests
+from akstats.plots import save_figures
 from akstats.report import export_research_products
 
 LOGGER = logging.getLogger(__name__)
