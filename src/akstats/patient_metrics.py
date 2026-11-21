@@ -1,7 +1,6 @@
 """Patient-level molecular metrics; patients, not variant rows, are the unit of analysis."""
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from scipy import stats
 from statsmodels.stats.proportion import proportion_confint
