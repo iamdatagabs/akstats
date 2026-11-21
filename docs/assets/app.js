@@ -104,8 +104,7 @@ function setupInteractions(){
  $("reset-filters").addEventListener("click",()=>{$("stage-filter").value="all";$("module-filter").value="all";$("gene-search").value="";renderExplorer();});
  $("chart-toggle").addEventListener("click",()=>{chartMode=chartMode==="bar"?"line":"bar";$("chart-toggle").setAttribute("aria-pressed",String(chartMode==="line"));$("chart-toggle").textContent=chartMode==="line"?"Visualização em linha":"Visualização em barras";drawMaf();});
  $("export-csv").addEventListener("click",exportCsv);$("to-top").addEventListener("click",()=>window.scrollTo({top:0,behavior:"smooth"}));
- const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add("is-visible");observer.unobserve(e.target);}}),{threshold:.12});
- document.querySelectorAll(".section,.stats-strip,.closing").forEach(el=>{el.classList.add("reveal");observer.observe(el);});
+ if(typeof IntersectionObserver==="function"){const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add("is-visible");observer.unobserve(e.target);}}),{threshold:.12});document.querySelectorAll(".section,.stats-strip,.closing").forEach(el=>{el.classList.add("reveal");observer.observe(el);});}
  window.addEventListener("scroll",()=> $("to-top").classList.toggle("visible",window.scrollY>600),{passive:true});
 }
 async function init(){
@@ -114,7 +113,8 @@ async function init(){
   const response=await fetch(DATA_URL,{cache:"no-store"});if(!response.ok)throw new Error("Arquivo data/dashboard.json não encontrado. Execute o workflow de publicação dos dados.");
   dashboard=await response.json();fillKpis(dashboard.summary||{});
   [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
-  drawMaf();drawDelta();drawCooc();drawPatientMetrics();drawTranscriptomics();
+  if(typeof Chart!=="undefined"){drawMaf();drawDelta();drawCooc();drawPatientMetrics();drawTranscriptomics();}
+  else{renderTable(filteredRows());$("result-count").textContent=`${(dashboard.maf||[]).length} registro(s) carregados`;showStatus("Dados carregados. A biblioteca de gráficos não respondeu; tabelas e indicadores permanecem disponíveis.",true);}
   showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · dados agregados do estudo publicado.`);
  }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message}`,true);$("result-count").textContent="Dados indisponíveis";$("maf-table").innerHTML='<tr><td colspan="4">Os registros aparecerão assim que o workflow publicar o dashboard.json.</td></tr>';}
 }
