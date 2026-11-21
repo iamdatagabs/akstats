@@ -1,6 +1,7 @@
 """Patient-level molecular metrics; patients, not variant rows, are the unit of analysis."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 from scipy import stats
 from statsmodels.stats.proportion import proportion_confint
@@ -87,7 +88,7 @@ def patient_level_tests(patient_maf: pd.DataFrame) -> pd.DataFrame:
         mcnemar_p = float(stats.binomtest(min(gained, lost), discordant, .5).pvalue) if discordant else 1.0
         rows.append({
             "Biological_group": group,
-            "n_patients": int(len(wide)),
+            "n_patients": len(wide),
             "friedman_statistic": friedman_stat,
             "friedman_p": friedman_p,
             "wilcoxon_statistic": wilcoxon_stat,
