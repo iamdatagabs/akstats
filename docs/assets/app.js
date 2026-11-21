@@ -115,7 +115,7 @@ async function init(){
   [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
   if(typeof Chart!=="undefined"){drawMaf();drawDelta();drawCooc();drawPatientMetrics();drawTranscriptomics();}
   else{renderTable(filteredRows());$("result-count").textContent=`${(dashboard.maf||[]).length} registro(s) carregados`;showStatus("Dados carregados. A biblioteca de gráficos não respondeu; tabelas e indicadores permanecem disponíveis.",true);}
-  showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · dados agregados do estudo publicado.`);
+  if(typeof Chart!=="undefined")showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · dados agregados do estudo publicado.`);
  }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message}`,true);$("result-count").textContent="Dados indisponíveis";$("maf-table").innerHTML='<tr><td colspan="4">Os registros aparecerão assim que o workflow publicar o dashboard.json.</td></tr>';}
 }
 init();
