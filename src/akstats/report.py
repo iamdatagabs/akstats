@@ -21,6 +21,9 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "Fisher tests": pd.read_csv(output_dir / "fisher_tests.csv"),
         "Patient-level summary": pd.read_csv(output_dir / "patient_level_summary.csv"),
         "Patient-level tests": pd.read_csv(output_dir / "patient_level_tests.csv"),
+        "GEO sample QC": pd.read_csv(output_dir / "geo_sample_qc.csv"),
+        "GEO target expression": pd.read_csv(output_dir / "geo_target_expression.csv"),
+        "GEO target contrasts": pd.read_csv(output_dir / "geo_target_contrasts.csv"),
     }
     workbook = output_dir / "AKStats_research_results.xlsx"
     with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
@@ -57,7 +60,17 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "## Fisher exact tests", "", fisher.to_markdown(index=False), "", "## Figures", "",
     ]
     lines.extend(f"- [{path.name}]({path.name})" for path in figures)
+    geo_status_path = output_dir / "geo_transcriptomics_status.json"
+    geo_status = json.loads(geo_status_path.read_text(encoding="utf-8")) if geo_status_path.exists() else {"status": "not_run"}
     lines.extend([
+        "", "## Independent mouse transcriptomics — GSE158634", "",
+        f"- Validation status: **{geo_status.get('status', 'not_run')}**",
+        f"- Samples mapped: **{geo_status.get('n_samples', 0)} / 20**",
+        f"- Target gene symbols mapped: **{geo_status.get('n_target_genes', 0)}**", "",
+        geo_status.get("notice", "No transcriptomic inference was performed."), "",
+        tables["GEO sample QC"].to_markdown(index=False) if not tables["GEO sample QC"].empty else "No GEO sample QC available.", "",
+        tables["GEO target expression"].to_markdown(index=False) if not tables["GEO target expression"].empty else "No target-gene expression table available.", "",
+        "Contrasts are descriptive differences between group medians of log2(CPM + 0.5), not differential-expression tests. Animal identifiers were not recoverable from GEO sample labels; therefore no inferential p-values or pathway enrichment are reported.", "",
         "", "## Interpretation and limitations", "",
         "- Exploratory re-analysis of published supplementary data; not a diagnostic or prognostic model.",
         "- Variant-level MAF observations are clustered within patients; row-wise Friedman/Wilcoxon p-values are exploratory, not patient-level inference.",
