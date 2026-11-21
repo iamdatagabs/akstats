@@ -1,8 +1,8 @@
 """Independent exploratory transcriptomics layer for GEO GSE158634."""
 from __future__ import annotations
 
+import json
 import logging
-import re
 from pathlib import Path
 
 import numpy as np
@@ -184,6 +184,6 @@ def run_transcriptomics(output_dir: Path) -> dict:
         status["status"] = "validation_failed"
         status["validation_message"] = str(exc)
     (output_dir / "geo_transcriptomics_status.json").write_text(
-        __import__("json").dumps(status, indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(status, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     return status
