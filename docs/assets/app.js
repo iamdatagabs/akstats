@@ -1,5 +1,5 @@
 const DATA_URL = "data/dashboard.json";
-let dashboard = null, mafChart = null, deltaChart = null, patientMafChart = null, prevalenceChart = null, chartMode = "bar";
+let dashboard = null, mafChart = null, deltaChart = null, patientMafChart = null, prevalenceChart = null, geoExpressionChart = null, chartMode = "bar";
 const $ = (id) => document.getElementById(id);
 const stageNames = {Normal:"Pele normal",AK:"Queratose actínica",SCC:"Carcinoma espinocelular",cSCC:"Carcinoma espinocelular"};
 const fmt = (n,digits=2) => Number(n).toLocaleString("pt-BR",{maximumFractionDigits:digits});
@@ -60,6 +60,33 @@ function drawPatientMetrics(){
  (dashboard?.patient_tests||[]).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td><b>${escapeHtml(r.Biological_group)}</b></td><td class="numeric">${fmt(r.n_patients,0)}</td><td class="numeric">${pFmt(r.friedman_p)}</td><td class="numeric">${pFmt(r.wilcoxon_p)}</td><td class="numeric">${fmt(r.presence_gained_AK_to_cSCC,0)} / ${fmt(r.presence_lost_AK_to_cSCC,0)}</td><td class="numeric">${pFmt(r.mcnemar_exact_p)}</td>`;body.append(tr);});
  if(!body.children.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="6">Métricas por paciente ainda não disponíveis.</td>';body.append(tr);}
 }
+function ensureTranscriptomicsSection(){
+ if($("geo-transcriptomics"))return;
+ const section=document.createElement("section");section.id="geo-transcriptomics";section.className="section geo-section";
+ section.innerHTML=`<div class="section-kicker">04 / EVIDÊNCIA TRANSCRIPTÔMICA INDEPENDENTE</div>
+ <div class="dashboard-heading"><div><h2>Da mutação à <em>expressão gênica.</em></h2><p>Coorte murina independente GSE158634 · RNA-seq bulk · 20 amostras depositadas.</p></div><span class="live-tag">GEO / MUS MUSCULUS</span></div>
+ <div id="geo-status" class="status">Aguardando validação da matriz de contagens…</div>
+ <div class="chart-grid"><article class="chart-card wide"><div class="chart-title"><div><span>EXPRESSÃO RELATIVA</span><h3>Genes do eixo ARID2–MAPK e Rora</h3></div></div><canvas id="geo-expression-chart" height="190"></canvas><p class="metric-explanation">Expressão resumida como log2(CPM + 0,5), com mediana por estágio. CPM corrige pelo tamanho da biblioteca; não é expressão absoluta nem substitui normalização/modelagem de RNA-seq para inferência.</p></article></div>
+ <article class="chart-card"><div class="chart-title"><div><span>CONTRASTES DESCRITIVOS</span><h3>Diferença entre medianas de expressão</h3></div></div><div class="table-scroll"><table class="data-table"><thead><tr><th>Gene</th><th>Contraste</th><th>Δ mediana log2-CPM</th></tr></thead><tbody id="geo-contrasts-body"></tbody></table></div><p class="metric-explanation">Valores positivos indicam mediana maior no segundo estágio do contraste; negativos indicam menor. Não são log2 fold-changes modelados nem genes diferencialmente expressos.</p></article>
+ <p class="data-note">A identificação individual dos animais não foi recuperada dos rótulos GEO. Por isso, esta camada não executa testes diferenciais, p-valores, enriquecimento funcional ou inferência sobre progressão individual. Os resultados humanos e murinos permanecem separados.</p>`;
+ const anchor=document.querySelector(".team");(anchor||$("resultados")).before(section);
+}
+function drawTranscriptomics(){
+ ensureTranscriptomicsSection();
+ const status=dashboard?.geo_transcriptomics||{},rows=dashboard?.geo_expression||[];
+ const label=status.status==="validated"?"Matriz validada":status.status==="counts_validated_gene_ids_unmapped"?"Contagens validadas; IDs gênicos sem mapeamento":status.status==="validation_failed"?"Validação não concluída":"Camada ainda não executada";
+ const details=status.validation_message?": "+status.validation_message:"";
+ $("geo-status").textContent=`${label} · ${status.n_samples??0}/20 amostras · ${status.n_features??0} features · ${status.n_target_genes??0} genes-alvo${details}`;
+ $("geo-status").classList.toggle("error",status.status==="validation_failed");
+ const genes=["ARID2","Rora","EGFR","KRAS","BRAF","MAPK1","MAP2K1"];
+ const available=genes.filter(g=>rows.some(r=>r.Gene===g));
+ if(geoExpressionChart)geoExpressionChart.destroy();
+ const stages=["Normal skin","Actinic keratosis","Cutaneous SCC"];
+ geoExpressionChart=new Chart($("geo-expression-chart"),{type:"line",data:{labels:stages.map(s=>stageNames[s]||s),datasets:available.map((gene,i)=>({label:gene,data:stages.map(stage=>{const r=rows.find(x=>x.Gene===gene&&x.Stage===stage);return r?Number(r.median_log2_cpm):null;}),borderColor:["#76543d","#526b4b","#879675","#a67c59","#8c718d","#6f8991","#b18c52"][i%7],backgroundColor:"transparent",tension:.2,spanGaps:false}))},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:c:`${c.dataset.label}: ${fmt(c.raw,2)} log2-CPM`}}},scales:{y:{title:{display:true,text:"Mediana log2(CPM + 0,5)"}}}}});
+ const body=$("geo-contrasts-body");body.replaceChildren();
+ (dashboard?.geo_contrasts||[]).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td><b>${escapeHtml(r.Gene)}</b></td><td>${escapeHtml(r.contrast)}</td><td class="numeric">${fmt(r.median_log2_cpm_difference,3)}</td>`;body.append(tr);});
+ if(!body.children.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="3">Nenhum gene-alvo foi mapeado na matriz; não foi inferida correspondência por aproximação.</td>';body.append(tr);}
+}
 function renderExplorer(){drawMaf();}
 function exportCsv(){
  const rows=filteredRows();if(!rows.length){showStatus("Não há registros para exportar com os filtros atuais.",true);return;}
@@ -84,7 +111,7 @@ async function init(){
   const response=await fetch(DATA_URL,{cache:"no-store"});if(!response.ok)throw new Error("Arquivo data/dashboard.json não encontrado. Execute o workflow de publicação dos dados.");
   dashboard=await response.json();fillKpis(dashboard.summary||{});
   [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
-  drawMaf();drawDelta();drawCooc();drawPatientMetrics();
+  drawMaf();drawDelta();drawCooc();drawPatientMetrics();drawTranscriptomics();
   showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · dados agregados do estudo publicado.`);
  }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message}`,true);$("result-count").textContent="Dados indisponíveis";$("maf-table").innerHTML='<tr><td colspan="4">Os registros aparecerão assim que o workflow publicar o dashboard.json.</td></tr>';}
 }
