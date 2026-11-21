@@ -111,7 +111,11 @@ def summarize_geo_counts(counts: pd.DataFrame, metadata: pd.DataFrame) -> tuple[
     matches = {feature: canonical[feature.casefold()] for feature in log_cpm.index
                if feature.casefold() in canonical}
     if not matches:
-        return qc, pd.DataFrame(), pd.DataFrame()
+        return (
+            qc,
+            pd.DataFrame(columns=["Gene", "Module", "Stage", "n_samples", "median_log2_cpm", "q1_log2_cpm", "q3_log2_cpm"]),
+            pd.DataFrame(columns=["Gene", "Module", "contrast", "median_log2_cpm_difference", "interpretation"]),
+        )
     rows = []
     for feature, gene in matches.items():
         module = TARGETS[gene]
@@ -150,6 +154,9 @@ def summarize_geo_counts(counts: pd.DataFrame, metadata: pd.DataFrame) -> tuple[
 def run_transcriptomics(output_dir: Path) -> dict:
     """Run the independent GEO QC and descriptive target-expression workflow."""
     output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "geo_sample_qc.csv").write_text("", encoding="utf-8")
+    pd.DataFrame(columns=["Gene", "Module", "Stage", "n_samples", "median_log2_cpm", "q1_log2_cpm", "q3_log2_cpm"]).to_csv(output_dir / "geo_target_expression.csv", index=False)
+    pd.DataFrame(columns=["Gene", "Module", "contrast", "median_log2_cpm_difference", "interpretation"]).to_csv(output_dir / "geo_target_contrasts.csv", index=False)
     status = {
         "accession": "GSE158634",
         "organism": "Mus musculus",
@@ -183,6 +190,7 @@ def run_transcriptomics(output_dir: Path) -> dict:
         LOGGER.warning("GSE158634 layer was not integrated: %s", exc)
         status["status"] = "validation_failed"
         status["validation_message"] = str(exc)
+        pd.DataFrame(columns=["sample_accession", "sample_title", "stage", "animal_id", "experimental_unit_note", "library_size", "detected_features"]).to_csv(output_dir / "geo_sample_qc.csv", index=False)
     (output_dir / "geo_transcriptomics_status.json").write_text(
         json.dumps(status, indent=2, ensure_ascii=False), encoding="utf-8"
     )
