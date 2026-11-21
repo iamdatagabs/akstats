@@ -35,6 +35,7 @@ The current public dataset does not provide individual-level age, sex, comorbidi
 - MAF across normal skin, actinic keratosis, and invasive cSCC.
 - Variant-level change from AK to cSCC (ΔMAF).
 - Patient-level co-occurrence at a configurable 2% MAF threshold.
+- Patient-level MAF summaries, Wilson confidence intervals for threshold prevalence, and paired stage tests.
 - Exploratory non-parametric statistics and pathway-module summaries.
 - Preliminary GEO integration for GSE158634 is being re-scoped: this is an RNA-seq study in a UV-induced mouse model (20 samples; normal skin, AK and cSCC), associated with GPL18480 / Illumina HiSeq 1500. It is an independent animal cohort, not the human mutation cohort. The gene-count supplementary file must be parsed and its identifier type/genome annotation verified before gene-level differential-expression analysis. It must not be treated as a microarray probe dataset.
 
@@ -82,6 +83,8 @@ Running `akstats` creates:
 | `outputs/maf_descriptive.csv` | Descriptive MAF statistics by group and stage |
 | `outputs/module_summary.csv` | MAF and ΔMAF summaries by pathway module |
 | `outputs/patient_cooccurrence.csv` | Patient-level ARID2/MAPK presence matrix |
+| `outputs/patient_level_summary.csv` | Patient-level MAF summaries and prevalence with Wilson 95% confidence intervals |
+| `outputs/patient_level_tests.csv` | Paired Friedman/Wilcoxon tests and exact McNemar tests |
 | `outputs/fisher_tests.csv` | Fisher exact tests by stage |
 | `outputs/maf_by_stage.png` | MAF distribution figure (300 dpi) |
 | `outputs/delta_maf_by_module.png` | ΔMAF distribution by pathway module (300 dpi) |
