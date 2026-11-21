@@ -76,7 +76,7 @@ function drawTranscriptomics(){
  const status=dashboard?.geo_transcriptomics||{},rows=dashboard?.geo_expression||[];
  const label=status.status==="validated"?"Matriz validada":status.status==="counts_validated_gene_ids_unmapped"?"Contagens validadas; IDs gênicos sem mapeamento":status.status==="validation_failed"?"Validação não concluída":"Camada ainda não executada";
  const details=status.validation_message?": "+status.validation_message:"";
- $("geo-status").textContent=`${label} · ${status.n_samples??0}/20 amostras · ${status.n_features??0} features · ${status.n_target_genes??0} genes-alvo${details}`;
+ $("geo-status").textContent=`${label} · ${status.n_samples??0}/20 amostras · ${status.n_features??0} features · ${status.n_target_genes??0} genes-alvo · ${status.n_qc_flagged??0} bibliotecas para revisão${details}`;
  $("geo-status").classList.toggle("error",status.status==="validation_failed");
  const qc=dashboard?.geo_sample_qc||[];\n if(geoQcChart)geoQcChart.destroy();\n geoQcChart=new Chart($("geo-qc-chart"),{type:"bar",data:{labels:qc.map(r=>r.sample_title),datasets:[{label:"Milhões de contagens",data:qc.map(r=>Number(r.library_size)/1e6),backgroundColor:qc.map(r=>r.qc_flag==="pass"?"#879675":"#b56b55"),borderRadius:3}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw,2)} milhões · ${qc[c.dataIndex]?.qc_flag==="pass"?"sem alerta":"revisar profundidade"}`}}},scales:{x:{beginAtZero:true,title:{display:true,text:"Milhões de contagens"}},y:{grid:{display:false}}}}});\n const genes=["Arid2","Rora","Egfr","Kras","Braf","Mapk1","Map2k1"];
  const available=genes.filter(g=>rows.some(r=>r.Gene===g));
