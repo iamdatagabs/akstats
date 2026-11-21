@@ -22,7 +22,7 @@ The pages are connected through their navigation and calls to action: use **Expl
 
 The dashboard is generated from the research pipeline and presents aggregate indicators: panel size, source and filtered variant counts, patient counts, variant-level MAF summaries, pathway-module ΔMAF, patient-level MAF summaries, prevalence above the operational 2% threshold with Wilson 95% confidence intervals, paired stage tests, and patient-level co-occurrence. The tissue stages (normal skin, AK, cSCC) are clinicopathological descriptors of the source cohort; they are not patient outcomes.
 
-The current public dataset does not provide individual-level age, sex, comorbidities, treatment response, recurrence, survival, or other longitudinal clinical outcomes. The dashboard therefore does not label MAF or ΔMAF as clinical endpoints and must not be used for diagnosis, prognosis, or treatment decisions.
+The current human mutation dataset does not provide individual-level age, sex, comorbidities, treatment response, recurrence, survival, or other longitudinal clinical outcomes. The independent GSE158634 mouse RNA-seq layer is descriptive only because animal-level identifiers are unavailable in the GEO sample labels. The dashboard therefore does not label MAF or ΔMAF as clinical endpoints and must not be used for diagnosis, prognosis, or treatment decisions.
 
 ## Research team
 
