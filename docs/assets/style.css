@@ -26,7 +26,8 @@
 .group-pill{padding:4px 8px;border-radius:20px;font-size:10px;font-weight:700}
 .group-pill.arid{background:#ead9c7;color:#76543d}.group-pill.mapk{background:#dfe6d9;color:#526b4b}
 .status.error{color:#9b4637}
-.reveal{opacity:0;transform:translateY(18px);transition:opacity .65s ease,transform .65s ease}
+/* Fail-open: dashboard content remains visible if scroll observation fails. */
+.reveal{opacity:1;transform:none;transition:opacity .65s ease,transform .65s ease}
 .reveal.is-visible{opacity:1;transform:none}
 .to-top{position:fixed;right:22px;bottom:22px;width:42px;height:42px;border:0;border-radius:50%;background:var(--green);color:white;font-size:20px;box-shadow:0 6px 22px #29271f2b;cursor:pointer;opacity:0;pointer-events:none;transform:translateY(8px);transition:.25s;z-index:20}
 .to-top.visible{opacity:1;pointer-events:auto;transform:none}
