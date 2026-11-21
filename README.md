@@ -20,7 +20,7 @@ The pages are connected through their navigation and calls to action: use **Expl
 - **Repository:** https://github.com/iamdatagabs/akstats
 - **GitHub Pages deployment:** https://github.com/iamdatagabs/akstats/actions
 
-The dashboard is generated from the research pipeline and presents aggregate indicators: panel size, source and filtered variant counts, patient counts, MAF summaries by tissue stage and biological group, pathway-module ΔMAF, and patient-level co-occurrence. The tissue stages (normal skin, AK, cSCC) are clinicopathological descriptors of the source cohort; they are not patient outcomes.
+The dashboard is generated from the research pipeline and presents aggregate indicators: panel size, source and filtered variant counts, patient counts, variant-level MAF summaries, pathway-module ΔMAF, patient-level MAF summaries, prevalence above the operational 2% threshold with Wilson 95% confidence intervals, paired stage tests, and patient-level co-occurrence. The tissue stages (normal skin, AK, cSCC) are clinicopathological descriptors of the source cohort; they are not patient outcomes.
 
 The current public dataset does not provide individual-level age, sex, comorbidities, treatment response, recurrence, survival, or other longitudinal clinical outcomes. The dashboard therefore does not label MAF or ΔMAF as clinical endpoints and must not be used for diagnosis, prognosis, or treatment decisions.
 
@@ -114,7 +114,7 @@ The **Build research products** workflow can be started manually from the Action
 
 ## Statistical interpretation and limitations
 
-1. **Experimental unit:** multiple variants may belong to the same patient. Variant rows are not independent biological replicates. The row-wise Friedman and Wilcoxon calculations retained from the notebook are labelled exploratory and must not be interpreted as patient-level inference.
+1. **Experimental unit:** multiple variants may belong to the same patient. Variant rows are not independent biological replicates. The legacy row-wise Friedman and Wilcoxon calculations are exploratory only. New patient-level summaries aggregate the maximum observed variant MAF per patient, group and stage; this is a descriptive operational measure, not total tumor burden. Paired patient-level tests use patients as the unit of analysis.
 2. **MAF is not clone size:** ΔMAF is a descriptive change in observed variant allele fraction. Copy-number changes, purity, sampling, and assay characteristics can affect it.
 3. **Threshold choice:** the 2% MAF threshold is an operational parameter, not a universal biological cutoff.
 4. **Co-occurrence is not causation:** Fisher's exact test uses a small patient cohort. Report cell counts and uncertainty alongside p-values.
