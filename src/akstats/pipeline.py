@@ -15,6 +15,7 @@ from akstats.data import load_mutation_sources
 from akstats.patient_metrics import patient_level_maf, patient_level_summary, patient_level_tests
 from akstats.plots import save_figures
 from akstats.report import export_research_products
+from akstats.transcriptomics import run_transcriptomics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ def run_pipeline() -> None:
         json.dumps(tests, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     figures = save_figures(axis, OUTPUT_DIR)
+    geo_status = run_transcriptomics(OUTPUT_DIR)
+    LOGGER.info("GSE158634 transcriptomics status: %s", geo_status["status"])
     products = export_research_products(OUTPUT_DIR, panel, variants, axis, figures)
     LOGGER.info("Panel genes: %d", panel["Gene"].nunique())
     LOGGER.info(
