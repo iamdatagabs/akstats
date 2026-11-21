@@ -78,7 +78,7 @@ function drawTranscriptomics(){
  const details=status.validation_message?": "+status.validation_message:"";
  $("geo-status").textContent=`${label} · ${status.n_samples??0}/20 amostras · ${status.n_features??0} features · ${status.n_target_genes??0} genes-alvo${details}`;
  $("geo-status").classList.toggle("error",status.status==="validation_failed");
- const genes=["ARID2","Rora","EGFR","KRAS","BRAF","MAPK1","MAP2K1"];
+ const genes=["Arid2","Rora","Egfr","Kras","Braf","Mapk1","Map2k1"];
  const available=genes.filter(g=>rows.some(r=>r.Gene===g));
  if(geoExpressionChart)geoExpressionChart.destroy();
  const stages=["Normal skin","Actinic keratosis","Cutaneous SCC"];
