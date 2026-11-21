@@ -8,7 +8,6 @@ from statsmodels.stats.proportion import proportion_confint
 
 from akstats.config import CLONALITY_THRESHOLD
 
-
 STAGES = {"Normal": "Normal_MAF", "AK": "AK_MAF", "cSCC": "SCC_MAF"}
 
 
