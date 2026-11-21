@@ -85,6 +85,10 @@ Running `akstats` creates:
 | `outputs/patient_cooccurrence.csv` | Patient-level ARID2/MAPK presence matrix |
 | `outputs/patient_level_summary.csv` | Patient-level MAF summaries and prevalence with Wilson 95% confidence intervals |
 | `outputs/patient_level_tests.csv` | Paired Friedman/Wilcoxon tests and exact McNemar tests |
+| `outputs/geo_transcriptomics_status.json` | Validation status and limitations for independent GSE158634 RNA-seq |
+| `outputs/geo_sample_qc.csv` | Library size and detected-feature QC for the 20 GEO samples |
+| `outputs/geo_target_expression.csv` | Descriptive log2-CPM summaries for mapped ARID2–MAPK targets and Rora |
+| `outputs/geo_target_contrasts.csv` | Differences between stage medians; not differential-expression tests |
 | `outputs/fisher_tests.csv` | Fisher exact tests by stage |
 | `outputs/maf_by_stage.png` | MAF distribution figure (300 dpi) |
 | `outputs/delta_maf_by_module.png` | ΔMAF distribution by pathway module (300 dpi) |
