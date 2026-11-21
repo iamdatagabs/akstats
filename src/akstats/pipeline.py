@@ -13,6 +13,7 @@ from akstats.analysis import (
 from akstats.config import OUTPUT_DIR, PROCESSED_DIR
 from akstats.data import load_mutation_sources
 from akstats.plots import save_figures
+from akstats.patient_metrics import patient_level_maf, patient_level_summary, patient_level_tests
 from akstats.report import export_research_products
 
 LOGGER = logging.getLogger(__name__)
@@ -31,6 +32,9 @@ def run_pipeline() -> None:
     cooc = cooccurrence_table(axis, variants["Case"])
     cooc.to_csv(OUTPUT_DIR / "patient_cooccurrence.csv", index=False)
     fisher_by_stage(cooc).to_csv(OUTPUT_DIR / "fisher_tests.csv", index=False)
+    patient_maf = patient_level_maf(axis, variants["Case"])
+    patient_level_summary(patient_maf).to_csv(OUTPUT_DIR / "patient_level_summary.csv", index=False)
+    patient_level_tests(patient_maf).to_csv(OUTPUT_DIR / "patient_level_tests.csv", index=False)
     tests = paired_stage_tests(axis)
     (OUTPUT_DIR / "exploratory_tests.json").write_text(
         json.dumps(tests, indent=2, ensure_ascii=False), encoding="utf-8"
