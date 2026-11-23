@@ -1,4 +1,4 @@
-"""Prepare the public, aggregate-only JSON consumed by the GitHub Pages dashboard."""
+"""Prepare aggregate-only JSON for the public GitHub Pages dashboard."""
 from __future__ import annotations
 
 import json
@@ -20,6 +20,31 @@ def records(filename: str) -> list[dict]:
     return json.loads(frame.to_json(orient="records"))
 
 
+def summarize_gene_maf(axis: pd.DataFrame) -> pd.DataFrame:
+    """Summarize variant MAF by gene, pathway module, biological group and stage."""
+    required = {"Hugo_Symbol", "Module", "Biological_group", "Normal_MAF", "AK_MAF", "SCC_MAF"}
+    missing = required - set(axis.columns)
+    if missing:
+        raise ValueError(f"Filtered variant table is missing columns: {sorted(missing)}")
+    long = axis.melt(
+        id_vars=["Hugo_Symbol", "Module", "Biological_group"],
+        value_vars=["Normal_MAF", "AK_MAF", "SCC_MAF"],
+        var_name="Stage",
+        value_name="MAF",
+    )
+    long["Stage"] = long["Stage"].str.removesuffix("_MAF")
+    summary = long.groupby(
+        ["Hugo_Symbol", "Module", "Biological_group", "Stage"], dropna=False, observed=True
+    )["MAF"].agg(
+        n_variants="count",
+        mean="mean",
+        median="median",
+        q1=lambda values: values.quantile(0.25),
+        q3=lambda values: values.quantile(0.75),
+    ).reset_index()
+    return summary.rename(columns={"Hugo_Symbol": "Gene"})
+
+
 def main() -> None:
     overview = pd.read_excel(OUTPUT / "AKStats_research_results.xlsx", sheet_name="Study overview")
     metrics = dict(zip(overview["Metric"], overview["Value"]))
@@ -32,12 +57,12 @@ def main() -> None:
     geo_qc = records("geo_sample_qc.csv")
     geo_expression = records("geo_target_expression.csv")
     geo_contrasts = records("geo_target_contrasts.csv")
-    # Module labels are assigned from the variant-level descriptive summaries.
+
+    # Keep each analytical level distinct: group-level MAF, module-level ΔMAF,
+    # and gene-level MAF. Never assign one arbitrary module to an entire group.
     axis = pd.read_csv(ROOT / "data" / "processed" / "arid2_mapk_variants.csv")
-    module_map = axis[["Biological_group", "Module"]].drop_duplicates()
-    for row in maf:
-        candidates = module_map.loc[module_map["Biological_group"].eq(row["Biological_group"]), "Module"]
-        row["Module"] = candidates.iloc[0] if not candidates.empty else row["Biological_group"]
+    gene_maf = summarize_gene_maf(axis)
+
     DESTINATION.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -49,6 +74,7 @@ def main() -> None:
         },
         "maf": maf,
         "modules": modules,
+        "gene_maf": json.loads(gene_maf.to_json(orient="records")),
         "fisher": fisher,
         "patient_metrics": patient_metrics,
         "patient_tests": patient_tests,
