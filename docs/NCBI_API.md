@@ -49,7 +49,8 @@ Do not commit API keys. Set them as environment variables or repository secrets.
 
 - Sample groups are parsed from the family SOFT metadata; the expected GSM list is used only as a completeness check.
 - Normal UVF and UVR samples are kept distinct when exposure is explicitly recorded.
-- Animal IDs are extracted only from explicit animal/mouse/subject characteristics. The numeric suffix in a sample title is not treated as an animal identifier.
+- Verified animal IDs are extracted only from explicit animal/mouse/subject characteristics or linked BioSample attributes. The numeric suffix in a sample title is not treated as a verified animal identifier.
+- A provisional crosswalk aligns GEO title numbering with Table 2 of PMID 33664254 (four UVF controls; four UVR animals with matched NS, AK-1, AK-2 and cSCC samples). It is exported separately for manual review and never used for inference.
 - Multiple AK lesions from one animal are repeated observations, not independent biological replicates.
 - No sample is removed solely because its library-size QC flag is raised.
 - Gene-symbol mapping is exact and case-insensitive. Ensembl identifiers are not guessed.
