@@ -119,9 +119,10 @@ def test_identifier_mismatch_does_not_invent_gene_mapping(tmp_path):
 def test_biosample_metadata_enriches_only_explicit_exposure_and_animal_fields():
     metadata, _ = parse_geo_family_soft(_soft_fixture(include_animals=False))
     accession = metadata.loc[0, "sample_accession"]
+    biosample_accession = metadata.loc[0, "biosample_accession"]
     enriched = merge_biosample_metadata(metadata, {
-        "SAMN00000001": {
-            "accession": "SAMN00000001",
+        biosample_accession: {
+            "accession": biosample_accession,
             "attributes": {"animal_id": ["Mouse 07"], "treatment": ["UVR"]},
         }
     })
