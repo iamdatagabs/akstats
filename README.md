@@ -22,7 +22,7 @@ The pages are connected through their navigation and calls to action: use **Expl
 
 The dashboard is generated from the research pipeline and keeps analytical levels separate: group-level MAF summaries (ARID2 vs MAPK), gene-level MAF summaries (gene × stage, with module annotation), and module-level ΔMAF. The module selector filters gene-level records and the module chart; it does not relabel or filter group-level MAF summaries. The portal also presents panel size, source and filtered variant counts, patient counts, patient-level MAF summaries, prevalence above the operational 2% threshold with Wilson 95% confidence intervals, paired stage tests, and patient-level co-occurrence. The tissue stages (normal skin, AK, cSCC) are clinicopathological descriptors of the source cohort; they are not patient outcomes.
 
-The current human mutation dataset does not provide individual-level age, sex, comorbidities, treatment response, recurrence, survival, or other longitudinal clinical outcomes. The independent GSE158634 mouse RNA-seq layer is descriptive only because animal-level identifiers are unavailable in the GEO sample labels. The dashboard therefore does not label MAF or ΔMAF as clinical endpoints and must not be used for diagnosis, prognosis, or treatment decisions.
+The current human mutation dataset does not provide individual-level age, sex, comorbidities, treatment response, recurrence, survival, or other longitudinal clinical outcomes. The independent GSE158634 mouse RNA-seq layer is retrieved directly from NCBI: Entrez E-utilities are used for GEO accession discovery/summary, while the official GEO FTP distribution provides the family SOFT sample characteristics and supplementary integer count matrix. Animal IDs are accepted only when explicitly present in deposited sample metadata; sample-title suffixes are never used to invent animal links. If the animal-level design cannot be reconstructed, inferential differential-expression analysis remains blocked. The dashboard therefore does not label MAF or ΔMAF as clinical endpoints and must not be used for diagnosis, prognosis, or treatment decisions.
 
 ## Research team
 
@@ -37,7 +37,7 @@ The current human mutation dataset does not provide individual-level age, sex, c
 - Patient-level co-occurrence at a configurable 2% MAF threshold.
 - Patient-level MAF summaries, Wilson confidence intervals for threshold prevalence, and paired stage tests.
 - Exploratory non-parametric statistics and pathway-module summaries.
-- Preliminary GEO integration for GSE158634 is being re-scoped: this is an RNA-seq study in a UV-induced mouse model (20 samples; normal skin, AK and cSCC), associated with GPL18480 / Illumina HiSeq 1500. It is an independent animal cohort, not the human mutation cohort. The gene-count supplementary file must be parsed and its identifier type/genome annotation verified before gene-level differential-expression analysis. It must not be treated as a microarray probe dataset.
+- NCBI GEO integration for GSE158634 retrieves the family SOFT metadata and integer count matrix. The workflow reconciles all 20 GEO sample accessions, preserves normal UVF and UVR groups separately when exposure is available, audits repeated AK lesions by explicit animal ID, and exports sample-level QC. It does not infer animal IDs from title suffixes. Gene-symbol mapping is reported only when identifiers match exactly; genome assembly/annotation remain explicitly unresolved unless present in the source metadata. No differential-expression model is run unless the animal-level design can be reconstructed and reviewed.
 
 ## Data provenance
 
@@ -46,8 +46,11 @@ The mutation workflow downloads supplementary Excel files associated with DOI 10
 - [Supplementary panel (MOESM8)](https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-025-65687-y/MediaObjects/41467_2025_65687_MOESM8_ESM.xlsx)
 - [Supplementary mutation table (MOESM9)](https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-025-65687-y/MediaObjects/41467_2025_65687_MOESM9_ESM.xlsx)
 - [NCBI GEO GSE158634](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE158634)
+- [GEO family SOFT metadata](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE158nnn/GSE158634/soft/GSE158634_family.soft.gz)
+- [GEO supplementary gene-count matrix](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE158nnn/GSE158634/suppl/GSE158634_3.count.csv.gz)
+- [NCBI GEO programmatic access](https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html)
 
-Original MOESM8/MOESM9 workbooks are versioned under `data/raw/`; processed outputs are generated separately. GSE158634 is a distinct mouse RNA-seq experiment (20 samples; GPL18480, Illumina HiSeq 1500), so it can provide independent biological context but cannot be joined to the human patient records. Its supplementary count matrix and gene identifiers require validation before differential-expression inference. Consult the source article for cohort definitions, experimental methods, and data-use terms.
+Original MOESM8/MOESM9 workbooks are versioned under `data/raw/`; processed outputs are generated separately. GSE158634 is a distinct mouse RNA-seq experiment (20 samples; GPL18480, Illumina HiSeq 1500), so it can provide independent biological context but cannot be joined to the human patient records. The NCBI client uses E-utilities for Entrez metadata and the official GEO FTP endpoints for the full SOFT record and count matrix. The FTP files are cached under `data/raw/`. Consult the source article for cohort definitions, experimental methods, and data-use terms.
 
 ## Quick start
 
@@ -63,7 +66,7 @@ pip install -e ".[dev]"
 akstats
 ```
 
-The first run requires internet access to retrieve the source files. Later runs reuse the local cache. Tests use synthetic fixtures and do not download research data:
+The first run requires internet access to retrieve the source files. Later runs reuse the local cache. Optional NCBI settings are `NCBI_EMAIL` and `NCBI_API_KEY`; the API key is not required for low-volume use. E-utilities requests identify the application as `akstats` and respect NCBI rate limits. Tests use synthetic fixtures and do not download research data:
 
 ```bash
 pytest
@@ -85,7 +88,9 @@ Running `akstats` creates:
 | `outputs/patient_cooccurrence.csv` | Patient-level ARID2/MAPK presence matrix |
 | `outputs/patient_level_summary.csv` | Patient-level MAF summaries and prevalence with Wilson 95% confidence intervals |
 | `outputs/patient_level_tests.csv` | Paired Friedman/Wilcoxon tests and exact McNemar tests |
-| `outputs/geo_transcriptomics_status.json` | Validation status and limitations for independent GSE158634 RNA-seq |
+| `outputs/geo_transcriptomics_status.json` | NCBI retrieval, sample reconciliation, design and validation status for GSE158634 RNA-seq |
+| `outputs/geo_sample_metadata.csv` | Sample-level metadata parsed from the official GEO family SOFT file |
+| `outputs/geo_experimental_design.csv` | Animal-level repeated-measures audit; empty when animal IDs are not explicitly available |
 | `outputs/geo_sample_qc.csv` | Library size and detected-feature QC for the 20 GEO samples |
 | `outputs/geo_target_expression.csv` | Descriptive log2-CPM summaries for mapped ARID2–MAPK targets and Rora |
 | `outputs/geo_target_contrasts.csv` | Differences between stage medians; not differential-expression tests |
@@ -126,7 +131,8 @@ The **Build research products** workflow can be started manually from the Action
 3. **Threshold choice:** the 2% MAF threshold is an operational parameter, not a universal biological cutoff.
 4. **Co-occurrence is not causation:** Fisher's exact test uses a small patient cohort. Report cell counts and uncertainty alongside p-values.
 5. **Functional annotation:** consequence classes were inherited from the exploratory notebook and require review against the study's annotation protocol.
-6. **GEO probes are not genes:** expression data must be mapped using the correct GPL platform annotation before making claims about ARID2 or MAPK gene expression. Selecting the most variable probes does not establish gene-specific validation.
+6. **GEO sample design:** normal skin from UVF and UVR conditions must remain distinct. Multiple AK lesions from the same animal are repeated observations, not independent biological replicates. Animal identifiers must come from explicit sample metadata; title suffixes are not animal IDs. No inferential RNA-seq model is run until the experimental unit and matched design are verified.
+7. **RNA-seq identifiers and annotation:** the supplementary file is treated as integer counts only after numeric/integer validation. Gene-symbol matching is exact and case-insensitive; Ensembl or other identifiers are not guessed. Genome build and annotation release must be documented before gene-level biological interpretation.
 
 ## Original notebook
 
