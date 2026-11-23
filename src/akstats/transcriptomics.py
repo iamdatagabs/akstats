@@ -242,11 +242,14 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
         processing,
         re.IGNORECASE,
     )))
-    instruments = sorted(set(re.findall(
+    instruments = set(re.findall(
         r"\b(?:HiSeq|NextSeq|NovaSeq)\s*\d+",
         processing,
         re.IGNORECASE,
-    )))
+    ))
+    if "sra_instrument_model" in metadata:
+        instruments.update(metadata["sra_instrument_model"].dropna().astype(str))
+    instruments = sorted(instruments)
     platform_ids = sorted(set(metadata["platform_id"].dropna().astype(str)))
     if len(builds) > 1:
         build_status = "conflicting_source_metadata"
