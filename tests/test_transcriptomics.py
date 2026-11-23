@@ -131,8 +131,9 @@ def test_biosample_metadata_enriches_only_explicit_exposure_and_animal_fields():
     })
     row = enriched.loc[enriched["sample_accession"].eq(accession)].iloc[0]
     assert row["animal_id"] == "07"
-    assert row["exposure_group"] == "UVR"
-    assert row["analysis_group"] == "Normal skin (UVR)"
+    assert pd.isna(row["exposure_group"])
+    assert row["exposure_metadata_conflict"] is True
+    assert row["analysis_group"] == "Normal skin (exposure unknown)"
 
 
 def test_metadata_consistency_flags_conflicting_genome_and_instrument_records():
@@ -192,3 +193,22 @@ def test_publication_candidate_crosswalk_is_complete_but_not_verified():
     assert design["verification_status"].eq("provisional_not_for_inference").all()
     assert crosswalk["publication_crosswalk_review_required"].all()
     assert "animal_id" not in crosswalk.columns
+
+
+
+def test_biosample_can_supply_exposure_when_geo_soft_does_not():
+    metadata, _ = parse_geo_family_soft(_soft_fixture(include_animals=False))
+    accession = metadata.loc[0, "sample_accession"]
+    biosample_accession = metadata.loc[0, "biosample_accession"]
+    metadata.loc[0, "characteristics_json"] = '{"tissue": ["skin"]}'
+    metadata.loc[0, "exposure_group"] = None
+    enriched = merge_biosample_metadata(metadata, {
+        biosample_accession: {
+            "accession": biosample_accession,
+            "attributes": {"treatment": ["UVR"]},
+        }
+    })
+    row = enriched.loc[enriched["sample_accession"].eq(accession)].iloc[0]
+    assert row["exposure_group"] == "UVR"
+    assert row["analysis_group"] == "Normal skin (UVR)"
+    assert row["exposure_metadata_conflict"] is False
