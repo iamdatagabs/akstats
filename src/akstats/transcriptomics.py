@@ -433,7 +433,13 @@ def run_transcriptomics(
         soft_text = read_gzip_text(resources["soft_path"])
         metadata, series = parse_geo_family_soft(soft_text)
         biosample_ids = metadata["biosample_accession"].dropna().astype(str).tolist()
-        biosample_records = client.fetch_biosample_records(biosample_ids)
+        biosample_error = None
+        try:
+            biosample_records = client.fetch_biosample_records(biosample_ids)
+        except Exception as exc:
+            LOGGER.warning("Linked BioSample enrichment unavailable: %s", exc)
+            biosample_records = {}
+            biosample_error = str(exc)
         metadata = merge_biosample_metadata(metadata, biosample_records)
         observed = set(metadata["sample_accession"])
         missing = sorted(EXPECTED_SAMPLES - observed)
@@ -470,8 +476,10 @@ def run_transcriptomics(
             ),
             **_metadata_consistency(metadata),
             "n_biosample_records": len(biosample_records),
+            "biosample_enrichment_error": biosample_error,
             "normal_exposure_unknown_samples": int((metadata["analysis_group"] == "Normal skin (exposure unknown)").sum()),
-            "normal_samples_split_by_exposure": metadata.loc[metadata["stage"].eq("Normal skin"), "exposure_group"].notna().all(),
+            "normal_samples_split_by_exposure": bool(metadata.loc[metadata["stage"].eq("Normal skin"), "exposure_group"].notna().all()),
+            "analysis_group_counts": metadata["analysis_group"].value_counts().to_dict(),
             "publication_design_reference": "PMID:33664254; eight mice split into UVF/UVR groups, with repeated tissues collected from UVR mice",
             "entrez_uid_count": len(resources.get("entrez_uids", [])),
             **design_status,
