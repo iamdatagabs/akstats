@@ -3,11 +3,12 @@ import pandas as pd
 
 from akstats.transcriptomics import (
     EXPECTED_SAMPLES,
+    _metadata_consistency,
     experimental_design,
     load_geo_counts,
-    parse_geo_family_soft,
     merge_biosample_metadata,
-    _metadata_consistency,
+    merge_sra_metadata,
+    parse_geo_family_soft,
     summarize_geo_counts,
 )
 
@@ -45,6 +46,7 @@ def _soft_fixture(include_animals=True):
         if include_animals and animal is not None:
             lines.append(f"!Sample_characteristics_ch1 = animal_id: Mouse {animal:02}")
         lines.append(f"!Sample_relation = BioSample: SAMN000000{len(lines):02}")
+        lines.append(f"!Sample_relation = SRA: SRX{len(lines):07}")
         lines.append("!Sample_platform_id = GPL18480")
     return "\n".join(lines) + "\n"
 
@@ -143,3 +145,20 @@ def test_metadata_consistency_flags_conflicting_genome_and_instrument_records():
     assert status["genome_builds_detected"] == ["hg19", "mm9"]
     assert status["genome_build_consistency"] == "conflicting_source_metadata"
     assert status["platform_instrument_warning"] is not None
+
+
+
+def test_sra_metadata_enriches_only_explicit_experiment_relations():
+    metadata, _ = parse_geo_family_soft(_soft_fixture(include_animals=False))
+    first = metadata.iloc[0]
+    metadata.loc[metadata.index[0], "biosample_accession"] = None
+    enriched = merge_sra_metadata(metadata, {
+        first["sra_experiment_accession"]: {
+            "accession": first["sra_experiment_accession"],
+            "instrument_model": "Illumina HiSeq 2500",
+            "biosample_accession": "SAMN12345678",
+        }
+    })
+    row = enriched.loc[enriched["sample_accession"].eq(first["sample_accession"])].iloc[0]
+    assert row["sra_instrument_model"] == "Illumina HiSeq 2500"
+    assert row["biosample_accession"] == "SAMN12345678"

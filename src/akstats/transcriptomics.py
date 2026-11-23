@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from akstats.config import GENE_TO_MODULE, RAW_DIR
-from akstats.ncbi import NCBIGEOClient, read_gzip_text
+from akstats.ncbi import NCBIError, NCBIGEOClient, read_gzip_text
 
 LOGGER = logging.getLogger(__name__)
 GEO_COUNT_FILE = "GSE158634_3.count.csv.gz"
@@ -95,6 +95,11 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             stage = _stage_from_text(searchable)
             exposure = _exposure_from_characteristics(characteristics)
             animal_id = _animal_from_characteristics(characteristics)
+            sra_match = next((
+                re.search(r"SRX\d+", relation, re.IGNORECASE)
+                for relation in current.get("relations", [])
+                if re.search(r"SRX\d+", relation, re.IGNORECASE)
+            ), None)
             biosample_match = next((
                 re.search(r"BioSample:\s*(SAMN\d+)", relation, re.IGNORECASE)
                 for relation in current.get("relations", [])
@@ -110,6 +115,8 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             records.append({
                 "sample_accession": current["sample_accession"],
                 "biosample_accession": biosample_match.group(1) if biosample_match else None,
+                "sra_experiment_accession": sra_match.group(0) if sra_match else None,
+                "sra_instrument_model": None,
                 "sample_title": title,
                 "stage": stage,
                 "analysis_group": analysis_group,
@@ -170,6 +177,23 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     return metadata, series
 
 
+def merge_sra_metadata(
+    metadata: pd.DataFrame, records: dict[str, dict[str, Any]]
+) -> pd.DataFrame:
+    """Join SRA experiment details to GEO samples using explicit SRX relations."""
+    result = metadata.copy()
+    for index, row in result.iterrows():
+        accession = row.get("sra_experiment_accession")
+        record = records.get(accession) if pd.notna(accession) else None
+        if not record:
+            continue
+        if record.get("biosample_accession") and pd.isna(row.get("biosample_accession")):
+            result.at[index, "biosample_accession"] = record["biosample_accession"]
+        result.at[index, "sra_instrument_model"] = record.get("instrument_model")
+        result.at[index, "metadata_source"] = "NCBI GEO SOFT + SRA"
+    return result
+
+
 def merge_biosample_metadata(
     metadata: pd.DataFrame, records: dict[str, dict[str, Any]]
 ) -> pd.DataFrame:
@@ -218,11 +242,14 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
         processing,
         re.IGNORECASE,
     )))
-    instruments = sorted(set(re.findall(
+    instruments = set(re.findall(
         r"\b(?:HiSeq|NextSeq|NovaSeq)\s*\d+",
         processing,
         re.IGNORECASE,
-    )))
+    ))
+    if "sra_instrument_model" in metadata:
+        instruments.update(metadata["sra_instrument_model"].dropna().astype(str))
+    instruments = sorted(instruments)
     platform_ids = sorted(set(metadata["platform_id"].dropna().astype(str)))
     if len(builds) > 1:
         build_status = "conflicting_source_metadata"
@@ -242,7 +269,7 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
             "conflicting: " + ", ".join(builds) if builds else "not reported"
         ),
         "genome_build_consistency": build_status,
-        "instrument_mentions_in_processing": instruments,
+        "instrument_models_reported": instruments,
         "platform_ids": platform_ids,
         "platform_instrument_warning": platform_warning,
     }
@@ -432,11 +459,20 @@ def run_transcriptomics(
         resources = _download_geo_sources(cache_dir, client)
         soft_text = read_gzip_text(resources["soft_path"])
         metadata, series = parse_geo_family_soft(soft_text)
+        sra_ids = metadata["sra_experiment_accession"].dropna().astype(str).tolist()
+        sra_error = None
+        try:
+            sra_records = client.fetch_sra_experiments(sra_ids)
+        except NCBIError as exc:
+            LOGGER.warning("Linked SRA enrichment unavailable: %s", exc)
+            sra_records = {}
+            sra_error = str(exc)
+        metadata = merge_sra_metadata(metadata, sra_records)
         biosample_ids = metadata["biosample_accession"].dropna().astype(str).tolist()
         biosample_error = None
         try:
             biosample_records = client.fetch_biosample_records(biosample_ids)
-        except Exception as exc:
+        except NCBIError as exc:
             LOGGER.warning("Linked BioSample enrichment unavailable: %s", exc)
             biosample_records = {}
             biosample_error = str(exc)
@@ -477,6 +513,9 @@ def run_transcriptomics(
             **_metadata_consistency(metadata),
             "n_biosample_records": len(biosample_records),
             "biosample_enrichment_error": biosample_error,
+            "n_sra_experiments_retrieved": len(sra_records),
+            "sra_enrichment_error": sra_error,
+            "sra_instrument_models": sorted(set(metadata["sra_instrument_model"].dropna().astype(str))),
             "normal_exposure_unknown_samples": int((metadata["analysis_group"] == "Normal skin (exposure unknown)").sum()),
             "normal_samples_split_by_exposure": bool(metadata.loc[metadata["stage"].eq("Normal skin"), "exposure_group"].notna().all()),
             "analysis_group_counts": metadata["analysis_group"].value_counts().to_dict(),
@@ -492,7 +531,7 @@ def run_transcriptomics(
                 "only; no DE model is run until the animal-level design is explicitly reconstructed."
             ),
         })
-    except Exception as exc:
+    except NCBIError as exc:
         LOGGER.exception("GSE158634 NCBI integration failed")
         status.update({
             "status": "retrieval_or_validation_failed",
