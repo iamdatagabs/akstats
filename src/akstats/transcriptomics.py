@@ -322,6 +322,105 @@ def load_geo_counts(
     return counts, metadata.copy()
 
 
+def build_publication_candidate_crosswalk(
+    metadata: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Create a provisional GSM-to-publication sample crosswalk for human review.
+
+    The publication reports four UVF controls and four UVR animals, each with
+    normal skin, AK-1, AK-2 and cSCC. GEO title numbering follows that same
+    block order, but the paper does not publish an explicit GSM-to-subject key.
+    Therefore these assignments are candidates only and are never copied into
+    the verified animal_id/exposure_group columns used by inferential models.
+    """
+    result = metadata.copy()
+    candidate_columns = {
+        "publication_candidate_animal_id": None,
+        "publication_candidate_exposure_group": None,
+        "publication_candidate_subject": None,
+        "publication_candidate_sample_name": None,
+        "publication_crosswalk_status": "unmapped",
+        "publication_crosswalk_basis": (
+            "Provisional alignment of GEO sample-title numbering to Table 2 "
+            "sample order in PMID 33664254; not an author-confirmed GSM crosswalk."
+        ),
+        "publication_crosswalk_review_required": True,
+    }
+    for column, default in candidate_columns.items():
+        result[column] = default
+
+    normal_map = {
+        "NS_001": ("UVF_1", "UVF", 1, "NC-1"),
+        "NS_002": ("UVF_2", "UVF", 2, "NC-2"),
+        "NS_004": ("UVF_3", "UVF", 3, "NC-3"),
+        "NS_005": ("UVF_4", "UVF", 4, "NC-4"),
+        "NS_006": ("UVR_1", "UVR", 5, "1-NC"),
+        "NS_007": ("UVR_2", "UVR", 6, "2-NC"),
+        "NS_008": ("UVR_3", "UVR", 7, "3-NC"),
+        "NS_009": ("UVR_4", "UVR", 8, "4-NC"),
+    }
+    for index, row in result.iterrows():
+        title = str(row.get("sample_title", "")).strip()
+        assignment = normal_map.get(title)
+        if assignment:
+            animal, exposure, subject, paper_name = assignment
+            role = "Normal skin"
+        else:
+            ak_match = re.fullmatch(r"AK_(\d+)", title, re.IGNORECASE)
+            cscc_match = re.fullmatch(r"cSCC_(\d+)", title, re.IGNORECASE)
+            if ak_match:
+                number = int(ak_match.group(1))
+                if 10 <= number <= 17:
+                    mouse = (number - 10) // 2 + 1
+                    lesion = 1 if (number - 10) % 2 == 0 else 2
+                    assignment = (
+                        f"UVR_{mouse}", "UVR", mouse + 4,
+                        f"{mouse}-AK-{lesion}",
+                    )
+                    role = f"AK-{lesion}"
+            elif cscc_match:
+                number = int(cscc_match.group(1))
+                if 18 <= number <= 21:
+                    mouse = number - 17
+                    assignment = (
+                        f"UVR_{mouse}", "UVR", mouse + 4, f"{mouse}-cSCC",
+                    )
+                    role = "cSCC"
+            if not assignment:
+                continue
+        animal, exposure, subject, paper_name = assignment
+        result.at[index, "publication_candidate_animal_id"] = animal
+        result.at[index, "publication_candidate_exposure_group"] = exposure
+        result.at[index, "publication_candidate_subject"] = subject
+        result.at[index, "publication_candidate_sample_name"] = paper_name
+        result.at[index, "publication_candidate_sample_role"] = role
+        result.at[index, "publication_crosswalk_status"] = "provisional_publication_order_match"
+
+    candidate = result.loc[
+        result["publication_candidate_animal_id"].notna()
+    ].copy()
+    design_rows = []
+    exposed = candidate.loc[
+        candidate["publication_candidate_exposure_group"].eq("UVR")
+    ]
+    for animal, frame in exposed.groupby("publication_candidate_animal_id"):
+        n_normal = int((frame["stage"] == "Normal skin").sum())
+        n_ak = int((frame["stage"] == "Actinic keratosis").sum())
+        n_cscc = int((frame["stage"] == "Cutaneous SCC").sum())
+        design_rows.append({
+            "candidate_animal_id": animal,
+            "candidate_subject": int(frame["publication_candidate_subject"].iloc[0]),
+            "n_normal_uvr": n_normal,
+            "n_ak_lesions": n_ak,
+            "n_cscc": n_cscc,
+            "complete_candidate_matched_set": (
+                n_normal == 1 and n_ak == 2 and n_cscc == 1
+            ),
+            "verification_status": "provisional_not_for_inference",
+        })
+    return result, pd.DataFrame(design_rows)
+
+
 def experimental_design(metadata: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Assess whether animal-level repeated measures can be reconstructed safely."""
     animal_rows = metadata.loc[metadata["animal_id"].notna()].copy()
@@ -477,6 +576,7 @@ def run_transcriptomics(
             biosample_records = {}
             biosample_error = str(exc)
         metadata = merge_biosample_metadata(metadata, biosample_records)
+        metadata, candidate_design = build_publication_candidate_crosswalk(metadata)
         observed = set(metadata["sample_accession"])
         missing = sorted(EXPECTED_SAMPLES - observed)
         unexpected = sorted(observed - EXPECTED_SAMPLES)
@@ -492,6 +592,10 @@ def run_transcriptomics(
 
         metadata.to_csv(output_dir / "geo_sample_metadata.csv", index=False)
         design.to_csv(output_dir / "geo_experimental_design.csv", index=False)
+        metadata.loc[metadata["publication_candidate_animal_id"].notna()].to_csv(
+            output_dir / "geo_publication_candidate_crosswalk.csv", index=False
+        )
+        candidate_design.to_csv(output_dir / "geo_publication_candidate_design.csv", index=False)
         qc.to_csv(output_dir / "geo_sample_qc.csv", index=False)
         summary.to_csv(output_dir / "geo_target_expression.csv", index=False)
         contrasts.to_csv(output_dir / "geo_target_contrasts.csv", index=False)
@@ -520,6 +624,10 @@ def run_transcriptomics(
             "normal_samples_split_by_exposure": bool(metadata.loc[metadata["stage"].eq("Normal skin"), "exposure_group"].notna().all()),
             "analysis_group_counts": metadata["analysis_group"].value_counts().to_dict(),
             "publication_design_reference": "PMID:33664254; eight mice split into UVF/UVR groups, with repeated tissues collected from UVR mice",
+            "publication_candidate_crosswalk_samples": int(metadata["publication_candidate_animal_id"].notna().sum()),
+            "publication_candidate_crosswalk_verified": False,
+            "publication_candidate_uvr_animals_complete": bool(not candidate_design.empty and candidate_design["complete_candidate_matched_set"].all()),
+            "publication_candidate_crosswalk_notice": "Provisional alignment of GEO title numbering to publication Table 2; do not use as verified animal metadata or for differential-expression inference.",
             "entrez_uid_count": len(resources.get("entrez_uids", [])),
             **design_status,
             "inference_status": design_status["inference_status"],
@@ -541,6 +649,8 @@ def run_transcriptomics(
         for filename, columns in (
             ("geo_sample_metadata.csv", ["sample_accession", "sample_title"]),
             ("geo_experimental_design.csv", ["animal_id", "complete_matched_set"]),
+            ("geo_publication_candidate_crosswalk.csv", ["sample_accession", "sample_title", "publication_candidate_animal_id", "publication_crosswalk_status"]),
+            ("geo_publication_candidate_design.csv", ["candidate_animal_id", "complete_candidate_matched_set"]),
             ("geo_sample_qc.csv", ["sample_accession", "stage", "library_size", "qc_flag"]),
             ("geo_target_expression.csv", SUMMARY_COLUMNS),
             ("geo_target_contrasts.csv", CONTRAST_COLUMNS),
