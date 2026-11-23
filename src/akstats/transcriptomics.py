@@ -117,6 +117,7 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
                 "sample_accession": current["sample_accession"],
                 "biosample_accession": biosample_match.group(1) if biosample_match else None,
                 "sra_experiment_accession": sra_match.group(0) if sra_match else None,
+                "sra_sample_accession": None,
                 "sra_instrument_model": None,
                 "sample_title": title,
                 "stage": stage,
@@ -183,11 +184,13 @@ def merge_sra_metadata(
 ) -> pd.DataFrame:
     """Join SRA experiment details to GEO samples using explicit SRX relations."""
     result = metadata.copy()
+    result["sra_sample_accession"] = None
     for index, row in result.iterrows():
         accession = row.get("sra_experiment_accession")
         record = records.get(accession) if pd.notna(accession) else None
         if not record:
             continue
+        result.at[index, "sra_sample_accession"] = record.get("sra_sample_accession")
         if record.get("biosample_accession") and pd.isna(row.get("biosample_accession")):
             result.at[index, "biosample_accession"] = record["biosample_accession"]
         result.at[index, "sra_instrument_model"] = record.get("instrument_model")
