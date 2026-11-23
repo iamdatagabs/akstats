@@ -11,7 +11,7 @@ import pandas as pd
 
 def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd.DataFrame,
                              axis: pd.DataFrame, figures: list[Path]) -> list[Path]:
-    """Create a consolidated XLSX workbook, Markdown report, HTML report and manifest."""
+    """Create a consolidated workbook, Markdown report, HTML report and manifest."""
     output_dir.mkdir(parents=True, exist_ok=True)
     tables = {
         "Filtered variants": axis,
@@ -21,6 +21,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "Fisher tests": pd.read_csv(output_dir / "fisher_tests.csv"),
         "Patient-level summary": pd.read_csv(output_dir / "patient_level_summary.csv"),
         "Patient-level tests": pd.read_csv(output_dir / "patient_level_tests.csv"),
+        "GEO sample metadata": pd.read_csv(output_dir / "geo_sample_metadata.csv"),
+        "GEO experimental design": pd.read_csv(output_dir / "geo_experimental_design.csv"),
         "GEO sample QC": pd.read_csv(output_dir / "geo_sample_qc.csv"),
         "GEO target expression": pd.read_csv(output_dir / "geo_target_expression.csv"),
         "GEO target contrasts": pd.read_csv(output_dir / "geo_target_contrasts.csv"),
@@ -39,6 +41,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
     descriptive, modules = tables["MAF descriptive"], tables["Pathway modules"]
     cooc, fisher = tables["Patient cooccurrence"], tables["Fisher tests"]
     patient_summary, patient_tests = tables["Patient-level summary"], tables["Patient-level tests"]
+    geo_status_path = output_dir / "geo_transcriptomics_status.json"
+    geo_status = json.loads(geo_status_path.read_text(encoding="utf-8")) if geo_status_path.exists() else {}
     lines = [
         "# AKStats — research results", "",
         f"Generated (UTC): {datetime.now(timezone.utc).isoformat(timespec='seconds')}", "",
@@ -50,37 +54,52 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "## Descriptive MAF summary", "", descriptive.to_markdown(index=False), "",
         "## Pathway-module summary", "",
         modules.to_markdown(index=False) if not modules.empty else "No module-level records.", "",
-        "## Patient-level molecular summary", "",
-        patient_summary.to_markdown(index=False), "",
+        "## Patient-level molecular summary", "", patient_summary.to_markdown(index=False), "",
         "The patient-level MAF measure is the maximum variant MAF observed within each patient, group and stage. Patients without an eligible variant are represented as zero in the filtered dataset; this does not mean a biological MAF measurement of zero.", "",
         "## Patient-level paired tests", "", patient_tests.to_markdown(index=False), "",
         "Friedman compares the three paired tissue stages; Wilcoxon compares AK with cSCC; exact McNemar compares threshold-positive status. These analyses are exploratory and do not establish clinical utility.", "",
         "## Patient-level co-occurrence", "",
         f"Patients in co-occurrence matrix: **{len(cooc)}**", "", cooc.to_markdown(index=False), "",
-        "## Fisher exact tests", "", fisher.to_markdown(index=False), "", "## Figures", "",
+        "## Fisher exact tests", "", fisher.to_markdown(index=False), "",
+        "## Figures", "",
     ]
     lines.extend(f"- [{path.name}]({path.name})" for path in figures)
-    geo_status_path = output_dir / "geo_transcriptomics_status.json"
-    geo_status = json.loads(geo_status_path.read_text(encoding="utf-8")) if geo_status_path.exists() else {"status": "not_run"}
     lines.extend([
         "", "## Independent mouse transcriptomics — GSE158634", "",
-        f"- Validation status: **{geo_status.get('status', 'not_run')}**",
-        f"- Samples mapped: **{geo_status.get('n_samples', 0)} / 20**",
+        f"- NCBI retrieval/validation status: **{geo_status.get('status', 'not_run')}**",
+        f"- Samples reconciled: **{geo_status.get('n_samples', 0)} / 20**",
         f"- Target gene symbols mapped: **{geo_status.get('n_target_genes', 0)}**",
-        f"- Libraries flagged for review: **{geo_status.get('n_qc_flagged', 0)}** (below 50% of the stage-specific median library size)", "",
+        f"- Libraries flagged for review: **{geo_status.get('n_qc_flagged', 0)}**",
+        f"- Animal IDs available: **{geo_status.get('animal_id_available', 'unknown')}**",
+        f"- Experimental design: **{geo_status.get('inference_status', 'not assessed')}**", "",
         geo_status.get("notice", "No transcriptomic inference was performed."), "",
-        tables["GEO sample QC"].to_markdown(index=False) if not tables["GEO sample QC"].empty else "No GEO sample QC available.", "",
-        tables["GEO target expression"].to_markdown(index=False) if not tables["GEO target expression"].empty else "No target-gene expression table available.", "",
-        "Contrasts are descriptive differences between group medians of log2(CPM + 0.5), not differential-expression tests. Animal identifiers were not recoverable from GEO sample labels; therefore no inferential p-values or pathway enrichment are reported.", "",
-        "", "## Interpretation and limitations", "",
+        "### GEO sample metadata", "",
+        tables["GEO sample metadata"].to_markdown(index=False)
+        if not tables["GEO sample metadata"].empty else "No GEO sample metadata available.", "",
+        "### Animal-level design audit", "",
+        tables["GEO experimental design"].to_markdown(index=False)
+        if not tables["GEO experimental design"].empty else "Animal-level links were not reconstructed.", "",
+        "### Sample-level QC", "",
+        tables["GEO sample QC"].to_markdown(index=False)
+        if not tables["GEO sample QC"].empty else "No GEO sample QC available.", "",
+        "### Descriptive target expression", "",
+        tables["GEO target expression"].to_markdown(index=False)
+        if not tables["GEO target expression"].empty else "No target-gene expression table available.", "",
+        "Contrasts are descriptive differences between group medians of log2(CPM + 0.5), not differential-expression tests. No sample is excluded solely by the library-size flag. No inferential p-values or enrichment results are reported until the animal-level experimental unit and model design are verified.", "",
+        "## Interpretation and limitations", "",
         "- Exploratory re-analysis of published supplementary data; not a diagnostic or prognostic model.",
         "- Variant-level MAF observations are clustered within patients; row-wise Friedman/Wilcoxon p-values are exploratory, not patient-level inference.",
         "- ΔMAF is descriptive, not clone size. Purity, copy number, sampling and assay properties can influence MAF.",
         "- The 2% MAF threshold is operational, not a universal biological cutoff.",
         "- Co-occurrence does not establish biological interaction or causation. Interpret Fisher tests with cell counts and cohort size.",
+        "- The mouse RNA-seq cohort is independent from the human mutation cohort and must never be joined by patient identifiers.",
+        "- The GEO workflow retrieves sample characteristics from the official family SOFT file. Animal IDs are accepted only when explicitly present in deposited metadata; sample-title suffixes are not treated as animal IDs.",
+        "- Genome assembly and annotation release remain unverified unless explicitly documented in the downloaded source metadata.",
         "- Review the source article and annotation protocol before biological interpretation or publication.", "",
         "## Data provenance", "",
-        "Mutation panel and variant tables: supplementary files MOESM8/MOESM9 associated with DOI 10.1038/s41467-025-65687-y. Original workbooks are versioned under data/raw/; processed outputs are generated separately.", "",
+        "Mutation panel and variant tables: supplementary files MOESM8/MOESM9 associated with DOI 10.1038/s41467-025-65687-y. Original workbooks are versioned under data/raw/; processed outputs are generated separately.",
+        "Transcriptomics metadata: NCBI GEO GSE158634 family SOFT via official GEO FTP; Entrez GEO DataSets E-utilities are queried for accession discovery/summary. Counts: GSE158634_3.count.csv.gz from the official GEO supplementary directory.", "",
+        "NCBI E-utilities usage is subject to NCBI rate limits. Configure NCBI_EMAIL and optionally NCBI_API_KEY as environment variables; no API key is required for standard low-volume use.", "",
     ])
     markdown_text = "\n".join(lines)
     md_path = output_dir / "research_report.md"
@@ -101,10 +120,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
     manifest.write_text(json.dumps({
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_doi": "10.1038/s41467-025-65687-y",
-        "source_files": [
-            "data/raw/41467_2025_65687_MOESM8_ESM.xlsx",
-            "data/raw/41467_2025_65687_MOESM9_ESM.xlsx",
-        ],
+        "transcriptomics_source": "NCBI GEO GSE158634",
+        "transcriptomics_status": geo_status.get("status", "not_run"),
         "panel_gene_count": panel["Gene"].nunique(),
         "source_variant_count": len(variants),
         "filtered_variant_count": len(axis),
