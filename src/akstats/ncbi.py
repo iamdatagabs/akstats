@@ -7,8 +7,9 @@ import os
 from pathlib import Path
 from typing import Any
 
-import requests
 from xml.etree import ElementTree
+
+import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
