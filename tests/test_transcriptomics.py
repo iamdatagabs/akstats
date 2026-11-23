@@ -151,6 +151,7 @@ def test_metadata_consistency_flags_conflicting_genome_and_instrument_records():
 def test_sra_metadata_enriches_only_explicit_experiment_relations():
     metadata, _ = parse_geo_family_soft(_soft_fixture(include_animals=False))
     first = metadata.iloc[0]
+    metadata.loc[metadata.index[0], "biosample_accession"] = None
     enriched = merge_sra_metadata(metadata, {
         first["sra_experiment_accession"]: {
             "accession": first["sra_experiment_accession"],
