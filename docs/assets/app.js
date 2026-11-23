@@ -10,8 +10,13 @@ function showStatus(message,error=false){const el=$("data-status");el.textConten
 function fillKpis(s){$("kpi-genes").textContent=fmt(s.panel_genes??0,0);$("kpi-raw").textContent=fmt(s.source_variants??0,0);$("kpi-axis").textContent=fmt(s.axis_variants??0,0);$("kpi-patients").textContent=fmt(s.patients??0,0);const notes=["Número de genes contemplados no painel de sequenciamento; não representa genes alterados.","Registros de variantes na tabela suplementar antes do filtro funcional.","Variantes funcionais retidas no eixo ARID2–MAPK após a curadoria e o filtro do painel.","Indivíduos representados na tabela de origem; a unidade para as novas análises pareadas."];document.querySelectorAll(".kpi small").forEach((el,i)=>{if(notes[i])el.textContent=notes[i];});}
 function filteredRows(){
  if(!dashboard?.maf)return [];
+ const stage=$("stage-filter").value;
+ return dashboard.maf.filter(r=>stage==="all"||r.Stage===stage);
+}
+function filteredGeneRows(){
+ if(!dashboard?.gene_maf)return [];
  const stage=$("stage-filter").value,module=$("module-filter").value,query=$("gene-search").value.trim().toLocaleLowerCase("pt-BR");
- return dashboard.maf.filter(r=>(stage==="all"||r.Stage===stage)&&(module==="all"||r.Module===module)&&(!query||[r.Module,r.Biological_group,r.Stage].join(" ").toLocaleLowerCase("pt-BR").includes(query)));
+ return dashboard.gene_maf.filter(r=>(stage==="all"||r.Stage===stage)&&(module==="all"||r.Module===module)&&(!query||[r.Gene,r.Module,r.Biological_group].join(" ").toLocaleLowerCase("pt-BR").includes(query)));
 }
 function drawMaf(){
  const rows=filteredRows(),stages=[...new Set(rows.map(r=>r.Stage))],labels=stages.map(s=>stageNames[s]||s);
@@ -19,12 +24,14 @@ function drawMaf(){
  if(mafChart)mafChart.destroy();
  mafChart=new Chart($("maf-chart"),{type:chartMode,data:{labels,datasets},options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"bottom"},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt(c.raw)}%`}}},scales:{y:{beginAtZero:true,title:{display:true,text:"MAF mediana (%)"},grid:{color:"#eee8de"}},x:{grid:{display:false}}},onClick:(event,elements)=>{if(!elements.length)return;$("stage-filter").value=stages[elements[0].index];renderExplorer();}}});
  addChartNote("maf-chart","MAF é a fração de leituras com a variante. A mediana resume os registros de variantes por grupo e estágio; não equivale a tamanho clonal nem a desfecho clínico.");
- $("result-count").textContent=`${rows.length} registro(s) exibido(s) · ${new Set(rows.map(r=>r.Module)).size} módulo(s)`;
- renderTable(rows);
+ const geneRows=filteredGeneRows();
+ $("result-count").textContent=`${geneRows.length} resumo(s) gene–estágio · ${new Set(geneRows.map(r=>r.Module)).size} módulo(s)`;
+ renderTable(geneRows);
 }
 function addChartNote(canvasId,text){const canvas=$(canvasId);if(!canvas)return;const card=canvas.closest(".chart-card");if(!card||card.querySelector(".metric-explanation"))return;const note=document.createElement("p");note.className="metric-explanation";note.textContent=text;card.append(note);}
 function drawDelta(){
- const rows=dashboard?.modules||[];if(deltaChart)deltaChart.destroy();
+ const selectedModule=$("module-filter")?.value||"all";
+ const rows=(dashboard?.modules||[]).filter(r=>selectedModule==="all"||r.Module===selectedModule);if(deltaChart)deltaChart.destroy();
  deltaChart=new Chart($("delta-chart"),{type:"bar",data:{labels:rows.map(r=>String(r.Module||"").replace(/^\\d+\\. /,"")),datasets:[{label:"ΔMAF mediana (p.p.)",data:rows.map(r=>Number(r.median_delta_maf)*100),backgroundColor:"#879675",borderRadius:5}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${fmt(c.raw)} pontos percentuais`}}},scales:{x:{title:{display:true,text:"Pontos percentuais"},grid:{color:"#eee8de"}},y:{grid:{display:false}}}}});
 }
 function drawCooc(){
@@ -36,8 +43,8 @@ function drawCooc(){
 }
 function renderTable(rows){
  const body=$("maf-table");body.replaceChildren();
- if(!rows.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="4">Nenhum registro corresponde aos filtros atuais.</td>';body.append(tr);return;}
- rows.slice().sort((a,b)=>Number(b.median)-Number(a.median)).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${escapeHtml(stageNames[r.Stage]||r.Stage)}</td><td><span class="group-pill ${r.Biological_group==="ARID2"?"arid":"mapk"}">${escapeHtml(r.Biological_group)}</span></td><td>${escapeHtml(String(r.Module||"—").replace(/^\\d+\\. /,""))}</td><td class="numeric">${pct(r.median)}</td>`;body.append(tr);});
+ if(!rows.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="5">Nenhum gene corresponde aos filtros atuais.</td>';body.append(tr);return;}
+ rows.slice().sort((a,b)=>Number(b.median)-Number(a.median)).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td>${escapeHtml(stageNames[r.Stage]||r.Stage)}</td><td><span class="group-pill ${r.Biological_group==="ARID2"?"arid":"mapk"}">${escapeHtml(r.Biological_group)}</span></td><td><b>${escapeHtml(r.Gene)}</b></td><td>${escapeHtml(String(r.Module||"—").replace(/^\\d+\\. /,""))}</td><td class="numeric">${pct(r.median)}</td>`;body.append(tr);});
 }
 function ensurePatientSection(){
  if($("patient-analysis"))return;
@@ -90,10 +97,10 @@ function drawTranscriptomics(){
  (dashboard?.geo_contrasts||[]).forEach(r=>{const tr=document.createElement("tr");tr.innerHTML=`<td><b>${escapeHtml(r.Gene)}</b></td><td>${escapeHtml(r.contrast)}</td><td class="numeric">${fmt(r.median_log2_cpm_difference,3)}</td>`;body.append(tr);});
  if(!body.children.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="3">Nenhum gene-alvo foi mapeado na matriz; não foi inferida correspondência por aproximação.</td>';body.append(tr);}
 }
-function renderExplorer(){drawMaf();}
+function renderExplorer(){drawMaf();drawDelta();}
 function exportCsv(){
- const rows=filteredRows();if(!rows.length){showStatus("Não há registros para exportar com os filtros atuais.",true);return;}
- const headers=["Stage","Biological_group","Module","median"];
+ const rows=filteredGeneRows();if(!rows.length){showStatus("Não há registros para exportar com os filtros atuais.",true);return;}
+ const headers=["Stage","Biological_group","Gene","Module","n_variants","mean","median","q1","q3"];
  const csv=[headers.join(";"),...rows.map(r=>headers.map(k=>String(r[k]??"").replace(/"/g,'""')).map(v=>`"${v}"`).join(";"))].join("\\r\\n");
  const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="akstats-registros-filtrados.csv";a.click();URL.revokeObjectURL(url);
  showStatus(`Exportação preparada: ${rows.length} registro(s), respeitando os filtros ativos.`);
@@ -112,10 +119,10 @@ async function init(){
   setupInteractions();
   const response=await fetch(DATA_URL,{cache:"no-store"});if(!response.ok)throw new Error("Arquivo data/dashboard.json não encontrado. Execute o workflow de publicação dos dados.");
   dashboard=await response.json();fillKpis(dashboard.summary||{});
-  [...new Set((dashboard.maf||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
+  [...new Set((dashboard.modules||[]).map(r=>r.Module).filter(Boolean))].forEach(m=>{const option=document.createElement("option");option.value=m;option.textContent=String(m).replace(/^\\d+\\. /,"");$("module-filter").append(option);});
   if(typeof Chart!=="undefined"){drawMaf();drawDelta();drawCooc();drawPatientMetrics();drawTranscriptomics();}
-  else{renderTable(filteredRows());$("result-count").textContent=`${(dashboard.maf||[]).length} registro(s) carregados`;showStatus("Dados carregados. A biblioteca de gráficos não respondeu; tabelas e indicadores permanecem disponíveis.",true);}
+  else{renderTable(filteredGeneRows());$("result-count").textContent=`${(dashboard.gene_maf||[]).length} resumo(s) gene–estágio carregados`;showStatus("Dados carregados. A biblioteca de gráficos não respondeu; tabelas e indicadores permanecem disponíveis.",true);}
   if(typeof Chart!=="undefined")showStatus(`Atualizado em ${dashboard.generated_at?new Date(dashboard.generated_at).toLocaleString("pt-BR"):"data não informada"} · dados agregados do estudo publicado.`);
- }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message}`,true);$("result-count").textContent="Dados indisponíveis";$("maf-table").innerHTML='<tr><td colspan="4">Os registros aparecerão assim que o workflow publicar o dashboard.json.</td></tr>';}
+ }catch(err){showStatus(`Não foi possível carregar os dados: ${err.message}`,true);$("result-count").textContent="Dados indisponíveis";$("maf-table").innerHTML='<tr><td colspan="5">Os registros aparecerão assim que o workflow publicar o dashboard.json.</td></tr>';}
 }
 init();

@@ -61,6 +61,31 @@ def module_summary(axis: pd.DataFrame) -> pd.DataFrame:
     ).reset_index()
 
 
+def gene_level_maf(axis: pd.DataFrame) -> pd.DataFrame:
+    """Summarize variant MAF by gene, pathway module, group and tissue stage."""
+    required = {"Hugo_Symbol", "Module", "Biological_group", *MAF_COLUMNS}
+    missing = required - set(axis.columns)
+    if missing:
+        raise ValueError(f"Filtered variant table is missing columns: {sorted(missing)}")
+    long = axis.melt(
+        id_vars=["Hugo_Symbol", "Module", "Biological_group"],
+        value_vars=list(MAF_COLUMNS),
+        var_name="Stage",
+        value_name="MAF",
+    )
+    long["Stage"] = long["Stage"].str.removesuffix("_MAF")
+    summary = long.groupby(
+        ["Hugo_Symbol", "Module", "Biological_group", "Stage"],
+        dropna=False,
+        observed=True,
+    )["MAF"].agg(
+        n_variants="count", mean="mean", median="median",
+        q1=lambda values: values.quantile(0.25),
+        q3=lambda values: values.quantile(0.75),
+    ).reset_index()
+    return summary.rename(columns={"Hugo_Symbol": "Gene"})
+
+
 def paired_stage_tests(axis: pd.DataFrame) -> dict[str, float]:
     """Run row-wise tests retained from the notebook; results are exploratory only.
 
