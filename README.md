@@ -47,6 +47,7 @@ The mutation workflow downloads supplementary Excel files associated with DOI 10
 - [Supplementary mutation table (MOESM9)](https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-025-65687-y/MediaObjects/41467_2025_65687_MOESM9_ESM.xlsx)
 - [NCBI GEO GSE158634](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE158634)
 - [Source article — PMID 33664254](https://pubmed.ncbi.nlm.nih.gov/33664254/)
+- [GSE158634 sample crosswalk evidence audit](docs/GSE158634_SAMPLE_CROSSWALK_AUDIT.md) — candidate GSM-to-paper-sample mapping and explicit assumptions.
 - [GEO family SOFT metadata](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE158nnn/GSE158634/soft/GSE158634_family.soft.gz)
 - [GEO supplementary gene-count matrix](https://ftp.ncbi.nlm.nih.gov/geo/series/GSE158nnn/GSE158634/suppl/GSE158634_3.count.csv.gz)
 - [NCBI GEO programmatic access](https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html)
