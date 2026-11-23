@@ -95,6 +95,11 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             stage = _stage_from_text(searchable)
             exposure = _exposure_from_characteristics(characteristics)
             animal_id = _animal_from_characteristics(characteristics)
+            sra_match = next((
+                re.search(r"SRX\\d+", relation, re.IGNORECASE)
+                for relation in current.get("relations", [])
+                if re.search(r"SRX\\d+", relation, re.IGNORECASE)
+            ), None)
             biosample_match = next((
                 re.search(r"BioSample:\s*(SAMN\d+)", relation, re.IGNORECASE)
                 for relation in current.get("relations", [])
@@ -110,6 +115,8 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             records.append({
                 "sample_accession": current["sample_accession"],
                 "biosample_accession": biosample_match.group(1) if biosample_match else None,
+                "sra_experiment_accession": sra_match.group(0) if sra_match else None,
+                "sra_instrument_model": None,
                 "sample_title": title,
                 "stage": stage,
                 "analysis_group": analysis_group,
@@ -168,6 +175,23 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     if metadata["sample_accession"].duplicated().any():
         raise ValueError("GEO family SOFT contains duplicate sample accessions.")
     return metadata, series
+
+
+def merge_sra_metadata(
+    metadata: pd.DataFrame, records: dict[str, dict[str, Any]]
+) -> pd.DataFrame:
+    """Join SRA experiment details to GEO samples using explicit SRX relations."""
+    result = metadata.copy()
+    for index, row in result.iterrows():
+        accession = row.get("sra_experiment_accession")
+        record = records.get(accession) if pd.notna(accession) else None
+        if not record:
+            continue
+        if record.get("biosample_accession") and not row.get("biosample_accession"):
+            result.at[index, "biosample_accession"] = record["biosample_accession"]
+        result.at[index, "sra_instrument_model"] = record.get("instrument_model")
+        result.at[index, "metadata_source"] = "NCBI GEO SOFT + SRA"
+    return result
 
 
 def merge_biosample_metadata(
@@ -432,6 +456,15 @@ def run_transcriptomics(
         resources = _download_geo_sources(cache_dir, client)
         soft_text = read_gzip_text(resources["soft_path"])
         metadata, series = parse_geo_family_soft(soft_text)
+        sra_ids = metadata["sra_experiment_accession"].dropna().astype(str).tolist()
+        sra_error = None
+        try:
+            sra_records = client.fetch_sra_experiments(sra_ids)
+        except Exception as exc:
+            LOGGER.warning("Linked SRA enrichment unavailable: %s", exc)
+            sra_records = {}
+            sra_error = str(exc)
+        metadata = merge_sra_metadata(metadata, sra_records)
         biosample_ids = metadata["biosample_accession"].dropna().astype(str).tolist()
         biosample_error = None
         try:
@@ -477,6 +510,9 @@ def run_transcriptomics(
             **_metadata_consistency(metadata),
             "n_biosample_records": len(biosample_records),
             "biosample_enrichment_error": biosample_error,
+            "n_sra_experiments_retrieved": len(sra_records),
+            "sra_enrichment_error": sra_error,
+            "sra_instrument_models": sorted(set(metadata["sra_instrument_model"].dropna().astype(str))),
             "normal_exposure_unknown_samples": int((metadata["analysis_group"] == "Normal skin (exposure unknown)").sum()),
             "normal_samples_split_by_exposure": bool(metadata.loc[metadata["stage"].eq("Normal skin"), "exposure_group"].notna().all()),
             "analysis_group_counts": metadata["analysis_group"].value_counts().to_dict(),
