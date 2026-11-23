@@ -23,6 +23,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "Patient-level tests": pd.read_csv(output_dir / "patient_level_tests.csv"),
         "GEO sample metadata": pd.read_csv(output_dir / "geo_sample_metadata.csv"),
         "GEO experimental design": pd.read_csv(output_dir / "geo_experimental_design.csv"),
+        "GEO candidate crosswalk": pd.read_csv(output_dir / "geo_publication_candidate_crosswalk.csv"),
+        "GEO candidate design": pd.read_csv(output_dir / "geo_publication_candidate_design.csv"),
         "GEO sample QC": pd.read_csv(output_dir / "geo_sample_qc.csv"),
         "GEO target expression": pd.read_csv(output_dir / "geo_target_expression.csv"),
         "GEO target contrasts": pd.read_csv(output_dir / "geo_target_contrasts.csv"),
@@ -84,7 +86,13 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         if not tables["GEO sample metadata"].empty else "No GEO sample metadata available.", "",
         "### Animal-level design audit", "",
         tables["GEO experimental design"].to_markdown(index=False)
-        if not tables["GEO experimental design"].empty else "Animal-level links were not reconstructed.", "",
+        if not tables["GEO experimental design"].empty else "Verified animal-level links were not reconstructed.", "",
+        "### Provisional publication-based crosswalk", "",
+        tables["GEO candidate design"].to_markdown(index=False)
+        if not tables["GEO candidate design"].empty else "No candidate animal groups could be aligned.", "",
+        "The candidate crosswalk aligns GEO sample-title numbering with the order of sample names in Table 2 of PMID 33664254. It is a review aid, not an author-confirmed GSM-to-animal key. It is not copied into verified animal IDs and is not used for inferential modeling.", "",
+        tables["GEO candidate crosswalk"].to_markdown(index=False)
+        if not tables["GEO candidate crosswalk"].empty else "No provisional sample crosswalk available.", "",
         "### Sample-level QC", "",
         tables["GEO sample QC"].to_markdown(index=False)
         if not tables["GEO sample QC"].empty else "No GEO sample QC available.", "",
@@ -99,7 +107,7 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         "- The 2% MAF threshold is operational, not a universal biological cutoff.",
         "- Co-occurrence does not establish biological interaction or causation. Interpret Fisher tests with cell counts and cohort size.",
         "- The mouse RNA-seq cohort is independent from the human mutation cohort and must never be joined by patient identifiers.",
-        "- The GEO workflow retrieves sample characteristics from the official family SOFT file. Animal IDs are accepted only when explicitly present in deposited metadata; sample-title suffixes are not treated as animal IDs.",
+        "- The GEO workflow retrieves sample characteristics from the official family SOFT file. Animal IDs are accepted only when explicitly present in deposited metadata; sample-title suffixes are not treated as verified animal IDs. A separate provisional publication crosswalk is provided for manual review only.",
         "- Genome assembly and annotation release must be reconciled. GSE158634 sample processing metadata currently mentions both hg19 and mm9; do not select one silently.",
         "- The GEO platform GPL18480 is titled HiSeq 1500, while the sample processing text mentions HiSeq 2500; verify the instrument against the publication.",
         "- Review the source article and annotation protocol before biological interpretation or publication.", "",
