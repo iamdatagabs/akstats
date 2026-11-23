@@ -70,7 +70,7 @@ def _animal_from_characteristics(characteristics: dict[str, list[str]]) -> str |
     for key, values in characteristics.items():
         if any(token in key for token in keys):
             for value in values:
-                match = re.search(r"(?:mouse|animal|subject)?\s*([A-Za-z]*\d+[A-Za-z0-9_-]*)", value, re.I)
+                match = re.search(r"(?:mouse|animal|subject)?\s*([A-Za-z]*\d+[A-Za-z0-9_-]*)", value, re.IGNORECASE)
                 if match:
                     return match.group(1)
     return None
@@ -101,7 +101,7 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
                 analysis_group = "Normal skin (exposure unknown)"
             else:
                 analysis_group = stage
-            title_match = re.search(r"\b(NS|AK|cSCC)[_-]?(\d+)\b", title, re.I)
+            title_match = re.search(r"\b(NS|AK|cSCC)[_-]?(\d+)\b", title, re.IGNORECASE)
             records.append({
                 "sample_accession": current["sample_accession"],
                 "sample_title": title,
