@@ -85,7 +85,8 @@ def test_ncbi_client_fetches_sra_instrument_and_biosample_link():
 
 
 
-def test_ncbi_client_paces_entrez_requests_to_documented_limits():
+def test_ncbi_client_paces_entrez_requests_to_documented_limits(monkeypatch):
+    monkeypatch.delenv("NCBI_API_KEY", raising=False)
     standard = NCBIGEOClient(api_key="")
     keyed = NCBIGEOClient(api_key="test-key")
     assert standard._eutils_interval == 1 / 3
