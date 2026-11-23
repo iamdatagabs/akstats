@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from xml.etree import ElementTree
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -131,6 +132,53 @@ class NCBIGEOClient:
     def fetch_count_matrix(self, destination: Path) -> Path:
         """Download the deposited integer gene-count matrix."""
         return self.download(GEO_COUNTS_URL, destination)
+
+    def fetch_biosample_records(self, accessions: list[str]) -> dict[str, dict[str, Any]]:
+        """Retrieve linked BioSample records and their explicit attributes in one EFetch call."""
+        unique = sorted(set(accessions))
+        if not unique:
+            return {}
+        response = self._get(
+            f"{EUTILS_BASE}/efetch.fcgi",
+            self._eutils_params({
+                "db": "biosample",
+                "id": ",".join(unique),
+                "retmode": "xml",
+            }),
+        )
+        try:
+            root = ElementTree.fromstring(response.content)
+        except ElementTree.ParseError as exc:
+            raise NCBIError("NCBI BioSample EFetch returned invalid XML.") from exc
+        records: dict[str, dict[str, Any]] = {}
+        for node in root.iter():
+            if not node.tag.endswith("BioSample"):
+                continue
+            accession = node.attrib.get("accession")
+            if not accession:
+                continue
+            attributes: dict[str, list[str]] = {}
+            for attribute in node.iter():
+                if not attribute.tag.endswith("Attribute"):
+                    continue
+                key = (
+                    attribute.attrib.get("attribute_name")
+                    or attribute.attrib.get("harmonized_name")
+                    or "attribute"
+                ).strip().casefold()
+                value = (attribute.text or "").strip()
+                if value:
+                    attributes.setdefault(key, []).append(value)
+            records[accession] = {
+                "accession": accession,
+                "title": next(
+                    ((child.text or "").strip() for child in node
+                     if child.tag.endswith("Description")),
+                    None,
+                ),
+                "attributes": attributes,
+            }
+        return records
 
     def fetch_study(self, cache_dir: Path, accession: str = "GSE158634") -> dict[str, Any]:
         """Fetch Entrez summary, family SOFT metadata and supplementary counts."""

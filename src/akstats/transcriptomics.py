@@ -47,9 +47,9 @@ def _stage_from_text(text: str) -> str:
     value = text.casefold()
     if re.search(r"cscc|cutaneous squamous|squamous cell carcinoma|carcinoma", value):
         return "Cutaneous SCC"
-    if re.search(r"actinic keratos|\bAK[_ -]?", value):
+    if re.search(r"actinic keratos|\bak[_ -]?", value):
         return "Actinic keratosis"
-    if re.search(r"normal|\bNS[_ -]?", value):
+    if re.search(r"normal|\bns[_ -]?", value):
         return "Normal skin"
     return "Unclassified"
 
@@ -70,7 +70,7 @@ def _animal_from_characteristics(characteristics: dict[str, list[str]]) -> str |
     for key, values in characteristics.items():
         if any(token in key for token in keys):
             for value in values:
-                match = re.search(r"(?:mouse|animal|subject)?\s*([A-Za-z]*\d+[A-Za-z0-9_-]*)", value, re.I)
+                match = re.search(r"(?:mouse|animal|subject)?\s*([A-Za-z]*\d+[A-Za-z0-9_-]*)", value, re.IGNORECASE)
                 if match:
                     return match.group(1)
     return None
@@ -95,15 +95,21 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             stage = _stage_from_text(searchable)
             exposure = _exposure_from_characteristics(characteristics)
             animal_id = _animal_from_characteristics(characteristics)
+            biosample_match = next((
+                re.search(r"BioSample:\s*(SAMN\d+)", relation, re.IGNORECASE)
+                for relation in current.get("relations", [])
+                if re.search(r"BioSample:\s*(SAMN\d+)", relation, re.IGNORECASE)
+            ), None)
             if stage == "Normal skin" and exposure:
                 analysis_group = f"Normal skin ({exposure})"
             elif stage == "Normal skin":
                 analysis_group = "Normal skin (exposure unknown)"
             else:
                 analysis_group = stage
-            title_match = re.search(r"\b(NS|AK|cSCC)[_-]?(\d+)\b", title, re.I)
+            title_match = re.search(r"\b(NS|AK|cSCC)[_-]?(\d+)\b", title, re.IGNORECASE)
             records.append({
                 "sample_accession": current["sample_accession"],
+                "biosample_accession": biosample_match.group(1) if biosample_match else None,
                 "sample_title": title,
                 "stage": stage,
                 "analysis_group": analysis_group,
@@ -114,6 +120,7 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
                 "platform_id": current.get("platform_id"),
                 "characteristics_json": json.dumps(characteristics, ensure_ascii=False, sort_keys=True),
                 "data_processing": " | ".join(current.get("data_processing", [])),
+                "treatment_protocol": " | ".join(current.get("treatment_protocol", [])),
                 "metadata_source": "NCBI GEO family SOFT",
             })
 
@@ -132,6 +139,8 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
                 "sample_accession": line.split("=", 1)[1].strip(),
                 "characteristics_raw": [],
                 "data_processing": [],
+                "treatment_protocol": [],
+                "relations": [],
             }
         elif current is not None and line.startswith("!Sample_"):
             key, _, value = line.partition("=")
@@ -147,6 +156,10 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
                 current["characteristics_raw"].append(value)
             elif key == "!Sample_data_processing":
                 current["data_processing"].append(value)
+            elif key.startswith("!Sample_treatment_protocol_ch"):
+                current["treatment_protocol"].append(value)
+            elif key == "!Sample_relation":
+                current["relations"].append(value)
     finish_sample()
 
     metadata = pd.DataFrame(records)
@@ -155,6 +168,84 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
     if metadata["sample_accession"].duplicated().any():
         raise ValueError("GEO family SOFT contains duplicate sample accessions.")
     return metadata, series
+
+
+def merge_biosample_metadata(
+    metadata: pd.DataFrame, records: dict[str, dict[str, Any]]
+) -> pd.DataFrame:
+    """Enrich GEO SOFT rows with explicit attributes from linked NCBI BioSamples."""
+    result = metadata.copy()
+    result["biosample_attributes_json"] = "{}"
+    for index, row in result.iterrows():
+        accession = row.get("biosample_accession")
+        record = records.get(accession) if pd.notna(accession) else None
+        if not record:
+            continue
+        attributes = record.get("attributes", {})
+        result.at[index, "biosample_attributes_json"] = json.dumps(
+            attributes, ensure_ascii=False, sort_keys=True
+        )
+        merged = {}
+        try:
+            merged.update(json.loads(row.get("characteristics_json") or "{}"))
+        except (TypeError, ValueError):
+            pass
+        for key, values in attributes.items():
+            merged.setdefault(key, []).extend(values)
+        exposure = _exposure_from_characteristics(merged)
+        animal_id = _animal_from_characteristics(merged)
+        if exposure:
+            result.at[index, "exposure_group"] = exposure
+        if animal_id:
+            result.at[index, "animal_id"] = animal_id
+        if result.at[index, "stage"] == "Normal skin":
+            result.at[index, "analysis_group"] = (
+                f"Normal skin ({exposure})" if exposure
+                else "Normal skin (exposure unknown)"
+            )
+        result.at[index, "characteristics_json"] = json.dumps(
+            merged, ensure_ascii=False, sort_keys=True
+        )
+        result.at[index, "metadata_source"] = "NCBI GEO family SOFT + BioSample"
+    return result
+
+
+def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
+    """Surface conflicting genome-build and sequencing-instrument statements."""
+    processing = " ".join(metadata.get("data_processing", pd.Series(dtype=str)).dropna().astype(str))
+    builds = sorted(set(re.findall(
+        r"\b(?:mm\d+|GRCm\d+|hg\d+|GRCh\d+)\b",
+        processing,
+        re.IGNORECASE,
+    )))
+    instruments = sorted(set(re.findall(
+        r"\b(?:HiSeq|NextSeq|NovaSeq)\s*\d+",
+        processing,
+        re.IGNORECASE,
+    )))
+    platform_ids = sorted(set(metadata["platform_id"].dropna().astype(str)))
+    if len(builds) > 1:
+        build_status = "conflicting_source_metadata"
+    elif len(builds) == 1:
+        build_status = "single_build_mentioned_not_independently_verified"
+    else:
+        build_status = "not_reported"
+    platform_warning = (
+        "GEO platform GPL18480 is titled Illumina HiSeq 1500, while sample processing "
+        "text mentions HiSeq 2500; verify against the source publication."
+        if "GPL18480" in platform_ids and any("2500" in item for item in instruments)
+        else None
+    )
+    return {
+        "genome_builds_detected": builds,
+        "genome_build": builds[0] if len(builds) == 1 else (
+            "conflicting: " + ", ".join(builds) if builds else "not reported"
+        ),
+        "genome_build_consistency": build_status,
+        "instrument_mentions_in_processing": instruments,
+        "platform_ids": platform_ids,
+        "platform_instrument_warning": platform_warning,
+    }
 
 
 def _download_geo_sources(cache_dir: Path, client: NCBIGEOClient | None = None) -> dict[str, Any]:
@@ -337,9 +428,19 @@ def run_transcriptomics(
         ),
     }
     try:
+        client = client or NCBIGEOClient()
         resources = _download_geo_sources(cache_dir, client)
         soft_text = read_gzip_text(resources["soft_path"])
         metadata, series = parse_geo_family_soft(soft_text)
+        biosample_ids = metadata["biosample_accession"].dropna().astype(str).tolist()
+        biosample_error = None
+        try:
+            biosample_records = client.fetch_biosample_records(biosample_ids)
+        except Exception as exc:
+            LOGGER.warning("Linked BioSample enrichment unavailable: %s", exc)
+            biosample_records = {}
+            biosample_error = str(exc)
+        metadata = merge_biosample_metadata(metadata, biosample_records)
         observed = set(metadata["sample_accession"])
         missing = sorted(EXPECTED_SAMPLES - observed)
         unexpected = sorted(observed - EXPECTED_SAMPLES)
@@ -373,14 +474,22 @@ def run_transcriptomics(
             "feature_identifier_type": (
                 "gene_symbol" if summary["Gene"].nunique() else "unresolved"
             ),
-            "genome_build": "not established from the downloaded metadata",
+            **_metadata_consistency(metadata),
+            "n_biosample_records": len(biosample_records),
+            "biosample_enrichment_error": biosample_error,
+            "normal_exposure_unknown_samples": int((metadata["analysis_group"] == "Normal skin (exposure unknown)").sum()),
+            "normal_samples_split_by_exposure": bool(metadata.loc[metadata["stage"].eq("Normal skin"), "exposure_group"].notna().all()),
+            "analysis_group_counts": metadata["analysis_group"].value_counts().to_dict(),
+            "publication_design_reference": "PMID:33664254; eight mice split into UVF/UVR groups, with repeated tissues collected from UVR mice",
             "entrez_uid_count": len(resources.get("entrez_uids", [])),
             **design_status,
             "inference_status": design_status["inference_status"],
             "notice": (
                 "NCBI sample metadata and integer count matrix were retrieved and reconciled. "
-                "The workflow reports descriptive expression only. No DE model is run until "
-                "the animal-level experimental unit is explicitly reconstructed and reviewed."
+                "The deposited SOFT records do not currently expose animal IDs or UVF/UVR labels "
+                "for each sample. The publication describes eight mice split between UVF and UVR, "
+                "but sample-to-animal links are not inferred from title order. Descriptive expression "
+                "only; no DE model is run until the animal-level design is explicitly reconstructed."
             ),
         })
     except Exception as exc:

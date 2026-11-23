@@ -9,7 +9,6 @@ OUTPUT_DIR = ROOT / "outputs"
 
 PANEL_URL = "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-025-65687-y/MediaObjects/41467_2025_65687_MOESM8_ESM.xlsx"
 VARIANTS_URL = "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-025-65687-y/MediaObjects/41467_2025_65687_MOESM9_ESM.xlsx"
-GEO_MATRIX_URL = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE158nnn/GSE158634/matrix/GSE158634_series_matrix.txt.gz"
 
 PANEL_SHEET = "v.3.0TargetGenes"
 VARIANTS_SHEET = "TableS5"

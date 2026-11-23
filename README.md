@@ -116,7 +116,9 @@ The **Build research products** workflow can be started manually from the Action
     │   ├── analysis.py            # Transformations and statistical summaries
     │   ├── cli.py                 # Command-line interface
     │   ├── config.py              # Sources, thresholds, pathway definitions
-    │   ├── data.py                # Download, parsing, schema validation
+    │   ├── data.py                # Human mutation-source download and validation
+    │   ├── ncbi.py                # NCBI E-utilities and GEO FTP client
+    │   ├── transcriptomics.py     # GEO SOFT parsing, design audit and RNA-seq QC
     │   ├── pipeline.py            # End-to-end orchestration
     │   ├── plots.py               # Figure generation
     │   └── report.py              # Excel, Markdown, HTML and manifest exports

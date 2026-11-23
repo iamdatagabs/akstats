@@ -1,4 +1,3 @@
-import gzip
 
 import pandas as pd
 
@@ -7,6 +6,8 @@ from akstats.transcriptomics import (
     experimental_design,
     load_geo_counts,
     parse_geo_family_soft,
+    merge_biosample_metadata,
+    _metadata_consistency,
     summarize_geo_counts,
 )
 
@@ -43,6 +44,7 @@ def _soft_fixture(include_animals=True):
         ])
         if include_animals and animal is not None:
             lines.append(f"!Sample_characteristics_ch1 = animal_id: Mouse {animal:02}")
+        lines.append(f"!Sample_relation = BioSample: SAMN000000{len(lines):02}")
         lines.append("!Sample_platform_id = GPL18480")
     return "\n".join(lines) + "\n"
 
@@ -111,3 +113,33 @@ def test_identifier_mismatch_does_not_invent_gene_mapping(tmp_path):
     assert len(qc) == 20
     assert summary.empty
     assert contrasts.empty
+
+
+
+def test_biosample_metadata_enriches_only_explicit_exposure_and_animal_fields():
+    metadata, _ = parse_geo_family_soft(_soft_fixture(include_animals=False))
+    accession = metadata.loc[0, "sample_accession"]
+    biosample_accession = metadata.loc[0, "biosample_accession"]
+    enriched = merge_biosample_metadata(metadata, {
+        biosample_accession: {
+            "accession": biosample_accession,
+            "attributes": {"animal_id": ["Mouse 07"], "treatment": ["UVR"]},
+        }
+    })
+    row = enriched.loc[enriched["sample_accession"].eq(accession)].iloc[0]
+    assert row["animal_id"] == "07"
+    assert row["exposure_group"] == "UVR"
+    assert row["analysis_group"] == "Normal skin (UVR)"
+
+
+def test_metadata_consistency_flags_conflicting_genome_and_instrument_records():
+    metadata = pd.DataFrame({
+        "data_processing": [
+            "mapped to human genome (hg19); Genome_build: mm9; HiSeq 2500 instrument"
+        ],
+        "platform_id": ["GPL18480"],
+    })
+    status = _metadata_consistency(metadata)
+    assert status["genome_builds_detected"] == ["hg19", "mm9"]
+    assert status["genome_build_consistency"] == "conflicting_source_metadata"
+    assert status["platform_instrument_warning"] is not None
