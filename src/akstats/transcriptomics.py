@@ -96,9 +96,9 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             exposure = _exposure_from_characteristics(characteristics)
             animal_id = _animal_from_characteristics(characteristics)
             sra_match = next((
-                re.search(r"SRX\\d+", relation, re.IGNORECASE)
+                re.search(r"SRX\d+", relation, re.IGNORECASE)
                 for relation in current.get("relations", [])
-                if re.search(r"SRX\\d+", relation, re.IGNORECASE)
+                if re.search(r"SRX\d+", relation, re.IGNORECASE)
             ), None)
             biosample_match = next((
                 re.search(r"BioSample:\s*(SAMN\d+)", relation, re.IGNORECASE)
