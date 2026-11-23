@@ -187,7 +187,7 @@ def merge_sra_metadata(
         record = records.get(accession) if pd.notna(accession) else None
         if not record:
             continue
-        if record.get("biosample_accession") and not row.get("biosample_accession"):
+        if record.get("biosample_accession") and pd.isna(row.get("biosample_accession")):
             result.at[index, "biosample_accession"] = record["biosample_accession"]
         result.at[index, "sra_instrument_model"] = record.get("instrument_model")
         result.at[index, "metadata_source"] = "NCBI GEO SOFT + SRA"
@@ -269,7 +269,7 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
             "conflicting: " + ", ".join(builds) if builds else "not reported"
         ),
         "genome_build_consistency": build_status,
-        "instrument_mentions_in_processing": instruments,
+        "instrument_models_reported": instruments,
         "platform_ids": platform_ids,
         "platform_instrument_warning": platform_warning,
     }
