@@ -8,7 +8,8 @@ AKStats retrieves GSE158634 from the official NCBI GEO distribution.
 2. `summarize_geo_series()` retrieves Entrez summaries with ESummary when a GEO DataSet UID is available.
 3. `fetch_series_soft()` downloads `GSE158634_family.soft.gz` from the GEO FTP directory. This file is the source of sample titles, characteristics, exposure labels, animal identifiers (when deposited), platform and processing notes.
 4. `fetch_count_matrix()` downloads `GSE158634_3.count.csv.gz`, the supplementary count matrix.
-5. `transcriptomics.run_transcriptomics()` reconciles the sample accessions, checks non-negative integer counts, exports sample-level QC and builds an animal-level design audit.
+5. Linked BioSample accessions (when present in GEO sample relations) are enriched through NCBI EFetch (`db=biosample`) to recover explicit animal/treatment attributes.
+6. `transcriptomics.run_transcriptomics()` reconciles the sample accessions, checks non-negative integer counts, exports sample-level QC and builds an animal-level design audit.
 
 E-utilities provide Entrez metadata; the complete SOFT record and large count matrix are downloaded from GEO's official FTP endpoints, following NCBI's programmatic-access guidance.
 
@@ -51,7 +52,8 @@ Do not commit API keys. Set them as environment variables or repository secrets.
 - Multiple AK lesions from one animal are repeated observations, not independent biological replicates.
 - No sample is removed solely because its library-size QC flag is raised.
 - Gene-symbol mapping is exact and case-insensitive. Ensembl identifiers are not guessed.
-- Genome assembly and annotation release remain unresolved unless the downloaded source explicitly identifies them.
+- Genome assembly and annotation release are audited across source statements. The current SOFT processing text mentions both hg19 and mm9; this conflict is surfaced and must not be silently resolved.
+- GPL18480 is labelled HiSeq 1500, while a sample processing note mentions HiSeq 2500. Verify this platform/instrument discrepancy against the publication.
 - The current implementation reports descriptive log2-CPM summaries only. Inferential differential-expression modeling remains blocked until the animal-level design is reconstructed and reviewed.
 
 ## NCBI references
