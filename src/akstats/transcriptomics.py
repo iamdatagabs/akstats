@@ -47,9 +47,9 @@ def _stage_from_text(text: str) -> str:
     value = text.casefold()
     if re.search(r"cscc|cutaneous squamous|squamous cell carcinoma|carcinoma", value):
         return "Cutaneous SCC"
-    if re.search(r"actinic keratos|\bAK[_ -]?", value):
+    if re.search(r"actinic keratos|\bak[_ -]?", value):
         return "Actinic keratosis"
-    if re.search(r"normal|\bNS[_ -]?", value):
+    if re.search(r"normal|\bns[_ -]?", value):
         return "Normal skin"
     return "Unclassified"
 
