@@ -1,104 +1,261 @@
-"""Independent exploratory transcriptomics layer for GEO GSE158634."""
+"""Design-aware, reproducible transcriptomics workflow for GEO GSE158634."""
 from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from akstats.config import GENE_TO_MODULE, RAW_DIR
+from akstats.ncbi import NCBIGEOClient, read_gzip_text
 
 LOGGER = logging.getLogger(__name__)
-GEO_COUNT_URL = (
-    "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE158nnn/GSE158634/"
-    "suppl/GSE158634_3.count.csv.gz"
-)
 GEO_COUNT_FILE = "GSE158634_3.count.csv.gz"
-SAMPLES = {
-    "GSM4804794": ("NS_001", "Normal skin"),
-    "GSM4804795": ("NS_002", "Normal skin"),
-    "GSM4804796": ("NS_004", "Normal skin"),
-    "GSM4804797": ("NS_005", "Normal skin"),
-    "GSM4804798": ("NS_006", "Normal skin"),
-    "GSM4804799": ("NS_007", "Normal skin"),
-    "GSM4804800": ("NS_008", "Normal skin"),
-    "GSM4804801": ("NS_009", "Normal skin"),
-    "GSM4804802": ("AK_010", "Actinic keratosis"),
-    "GSM4804803": ("AK_011", "Actinic keratosis"),
-    "GSM4804804": ("AK_012", "Actinic keratosis"),
-    "GSM4804805": ("AK_013", "Actinic keratosis"),
-    "GSM4804806": ("AK_014", "Actinic keratosis"),
-    "GSM4804807": ("AK_015", "Actinic keratosis"),
-    "GSM4804808": ("AK_016", "Actinic keratosis"),
-    "GSM4804809": ("AK_017", "Actinic keratosis"),
-    "GSM4804810": ("cSCC_018", "Cutaneous SCC"),
-    "GSM4804811": ("cSCC_019", "Cutaneous SCC"),
-    "GSM4804812": ("cSCC_020", "Cutaneous SCC"),
-    "GSM4804813": ("cSCC_021", "Cutaneous SCC"),
+GEO_SOFT_FILE = "GSE158634_family.soft.gz"
+
+# Expected accessions are a completeness check, not a source of biological metadata.
+EXPECTED_SAMPLES = {
+    "GSM4804794", "GSM4804795", "GSM4804796", "GSM4804797",
+    "GSM4804798", "GSM4804799", "GSM4804800", "GSM4804801",
+    "GSM4804802", "GSM4804803", "GSM4804804", "GSM4804805",
+    "GSM4804806", "GSM4804807", "GSM4804808", "GSM4804809",
+    "GSM4804810", "GSM4804811", "GSM4804812", "GSM4804813",
 }
 TARGETS = {gene[0] + gene[1:].lower(): module for gene, module in GENE_TO_MODULE.items()}
 TARGETS["Rora"] = "Literature candidate"
+SUMMARY_COLUMNS = [
+    "Gene", "Module", "Analysis_group", "Stage", "n_samples",
+    "median_log2_cpm", "q1_log2_cpm", "q3_log2_cpm",
+]
+CONTRAST_COLUMNS = [
+    "Gene", "Module", "contrast", "median_log2_cpm_difference", "interpretation",
+]
 
 
-def _download_counts(destination: Path) -> Path:
-    import requests
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if not destination.exists() or not destination.stat().st_size:
-        response = requests.get(GEO_COUNT_URL, timeout=120)
-        response.raise_for_status()
-        temporary = destination.with_suffix(destination.suffix + ".part")
-        temporary.write_bytes(response.content)
-        temporary.replace(destination)
-    return destination
+def _parse_characteristic(value: str) -> tuple[str, str]:
+    if ":" in value:
+        key, item = value.split(":", 1)
+        return key.strip().casefold(), item.strip()
+    return "characteristic", value.strip()
 
 
-def load_geo_counts(path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load integer gene counts and map the 20 GEO sample accessions to tissue stages."""
+def _stage_from_text(text: str) -> str:
+    value = text.casefold()
+    if re.search(r"cscc|cutaneous squamous|squamous cell carcinoma|carcinoma", value):
+        return "Cutaneous SCC"
+    if re.search(r"actinic keratos|\bAK[_ -]?", value):
+        return "Actinic keratosis"
+    if re.search(r"normal|\bNS[_ -]?", value):
+        return "Normal skin"
+    return "Unclassified"
+
+
+def _exposure_from_characteristics(characteristics: dict[str, list[str]]) -> str | None:
+    for key, values in characteristics.items():
+        if any(token in key for token in ("uv", "treatment", "exposure", "irradiation")):
+            value = " ".join(values).casefold()
+            if re.search(r"\buvf\b|unirradiated|non.?irradiated|no uv|without uv", value):
+                return "UVF"
+            if re.search(r"\buvr\b|irradiated|uv.?exposed|ultraviolet", value):
+                return "UVR"
+    return None
+
+
+def _animal_from_characteristics(characteristics: dict[str, list[str]]) -> str | None:
+    keys = ("animal", "mouse", "subject", "biological replicate", "organism id")
+    for key, values in characteristics.items():
+        if any(token in key for token in keys):
+            for value in values:
+                match = re.search(r"(?:mouse|animal|subject)?\s*([A-Za-z]*\d+[A-Za-z0-9_-]*)", value, re.I)
+                if match:
+                    return match.group(1)
+    return None
+
+
+def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Parse sample-level metadata from the official GEO family SOFT record."""
+    records: list[dict[str, Any]] = []
+    series: dict[str, Any] = {}
+    current: dict[str, Any] | None = None
+
+    def finish_sample() -> None:
+        if current and current.get("sample_accession"):
+            characteristics: dict[str, list[str]] = {}
+            for raw in current.get("characteristics_raw", []):
+                key, value = _parse_characteristic(raw)
+                characteristics.setdefault(key, []).append(value)
+            title = current.get("sample_title", "")
+            searchable = " ".join([title, current.get("source_name", ""), *[
+                f"{key}: {'; '.join(values)}" for key, values in characteristics.items()
+            ]])
+            stage = _stage_from_text(searchable)
+            exposure = _exposure_from_characteristics(characteristics)
+            animal_id = _animal_from_characteristics(characteristics)
+            if stage == "Normal skin" and exposure:
+                analysis_group = f"Normal skin ({exposure})"
+            elif stage == "Normal skin":
+                analysis_group = "Normal skin (exposure unknown)"
+            else:
+                analysis_group = stage
+            title_match = re.search(r"\b(NS|AK|cSCC)[_-]?(\d+)\b", title, re.I)
+            records.append({
+                "sample_accession": current["sample_accession"],
+                "sample_title": title,
+                "stage": stage,
+                "analysis_group": analysis_group,
+                "exposure_group": exposure,
+                "animal_id": animal_id,
+                "sample_label": title_match.group(0) if title_match else title,
+                "source_name": current.get("source_name"),
+                "platform_id": current.get("platform_id"),
+                "characteristics_json": json.dumps(characteristics, ensure_ascii=False, sort_keys=True),
+                "data_processing": " | ".join(current.get("data_processing", [])),
+                "metadata_source": "NCBI GEO family SOFT",
+            })
+
+    for line in text.splitlines():
+        if line.startswith("^SERIES ="):
+            series["accession"] = line.split("=", 1)[1].strip()
+        elif line.startswith("!Series_title ="):
+            series["title"] = line.split("=", 1)[1].strip()
+        elif line.startswith("!Series_summary ="):
+            series.setdefault("summary", []).append(line.split("=", 1)[1].strip())
+        elif line.startswith("!Series_overall_design ="):
+            series.setdefault("overall_design", []).append(line.split("=", 1)[1].strip())
+        elif line.startswith("^SAMPLE ="):
+            finish_sample()
+            current = {
+                "sample_accession": line.split("=", 1)[1].strip(),
+                "characteristics_raw": [],
+                "data_processing": [],
+            }
+        elif current is not None and line.startswith("!Sample_"):
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"')
+            if key == "!Sample_title":
+                current["sample_title"] = value
+            elif key == "!Sample_source_name_ch1":
+                current["source_name"] = value
+            elif key == "!Sample_platform_id":
+                current["platform_id"] = value
+            elif key.startswith("!Sample_characteristics_ch"):
+                current["characteristics_raw"].append(value)
+            elif key == "!Sample_data_processing":
+                current["data_processing"].append(value)
+    finish_sample()
+
+    metadata = pd.DataFrame(records)
+    if metadata.empty:
+        raise ValueError("GEO family SOFT contains no parseable sample records.")
+    if metadata["sample_accession"].duplicated().any():
+        raise ValueError("GEO family SOFT contains duplicate sample accessions.")
+    return metadata, series
+
+
+def _download_geo_sources(cache_dir: Path, client: NCBIGEOClient | None = None) -> dict[str, Any]:
+    client = client or NCBIGEOClient()
+    return client.fetch_study(cache_dir)
+
+
+def load_geo_counts(
+    path: Path, metadata: pd.DataFrame | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load integer counts and join columns to metadata by exact GEO accession/title."""
     matrix = pd.read_csv(path, compression="gzip")
-    if matrix.shape[1] < 21:
-        raise ValueError(f"GEO count matrix has only {matrix.shape[1] - 1} sample columns.")
+    if matrix.shape[1] < 2:
+        raise ValueError("GEO count matrix has no sample columns.")
     feature_col = matrix.columns[0]
     matrix = matrix.rename(columns={feature_col: "feature_id"}).dropna(subset=["feature_id"])
     matrix["feature_id"] = matrix["feature_id"].astype(str).str.strip()
     matrix = matrix.set_index("feature_id")
-    selected = {}
-    metadata = []
-    for accession, (title, stage) in SAMPLES.items():
-        candidates = [c for c in matrix.columns if str(c).strip() in {accession, title}]
+    if metadata is None:
+        raise ValueError("GEO SOFT sample metadata is required; sample groups are not hard-coded.")
+    selected: dict[str, Any] = {}
+    for row in metadata.itertuples(index=False):
+        accession = row.sample_accession
+        title = row.sample_title
+        candidates = [column for column in matrix.columns
+                      if str(column).strip() in {accession, title}]
         if not candidates:
-            candidates = [c for c in matrix.columns if title in str(c) or accession in str(c)]
+            candidates = [column for column in matrix.columns
+                          if accession in str(column) or title == str(column).strip()]
         if len(candidates) != 1:
             raise ValueError(
                 f"Expected one count column for {accession}/{title}; found {len(candidates)}."
             )
         selected[accession] = candidates[0]
-        metadata.append({
-            "sample_accession": accession,
-            "sample_title": title,
-            "stage": stage,
-            "animal_id": None,
-            "experimental_unit_note": "Animal ID not recoverable from deposited sample labels",
-        })
+    if set(selected) != set(metadata["sample_accession"]):
+        raise ValueError("Count matrix and SOFT metadata sample accessions do not match.")
     counts = matrix.loc[:, list(selected.values())].copy()
     counts.columns = list(selected.keys())
     counts = counts.apply(pd.to_numeric, errors="coerce")
     if counts.isna().any().any() or (counts < 0).any().any():
         raise ValueError("GEO count matrix contains missing, non-numeric or negative values.")
     if not np.allclose(counts.to_numpy(), np.round(counts.to_numpy())):
-        raise ValueError("Supplementary matrix is not integer raw counts; count model not applied.")
+        raise ValueError("Supplementary matrix is not integer raw counts.")
     counts = counts.round().astype("int64")
     if counts.index.duplicated().any():
         counts = counts.groupby(level=0).sum()
-    return counts, pd.DataFrame(metadata)
+    return counts, metadata.copy()
 
 
-def summarize_geo_counts(counts: pd.DataFrame, metadata: pd.DataFrame) -> tuple[
-    pd.DataFrame, pd.DataFrame, pd.DataFrame
-]:
-    """Return sample QC, target-gene log2-CPM summaries and descriptive stage contrasts."""
+def experimental_design(metadata: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Assess whether animal-level repeated measures can be reconstructed safely."""
+    animal_rows = metadata.loc[metadata["animal_id"].notna()].copy()
+    if animal_rows.empty:
+        return pd.DataFrame(columns=[
+            "animal_id", "n_normal_uvr", "n_ak_lesions", "n_cscc", "complete_matched_set"
+        ]), {
+            "animal_id_available": False,
+            "n_animals_identified": 0,
+            "design_ready_for_paired_model": False,
+            "inference_status": "blocked_missing_animal_id",
+            "design_notice": (
+                "Animal identifiers were not explicitly recoverable from GEO sample "
+                "characteristics. Sample title suffixes are not treated as animal IDs."
+            ),
+        }
+    exposed = animal_rows.loc[
+        animal_rows["exposure_group"].eq("UVR")
+        | animal_rows["stage"].isin(["Actinic keratosis", "Cutaneous SCC"])
+    ]
+    rows = []
+    for animal, frame in exposed.groupby("animal_id"):
+        n_normal = int((frame["analysis_group"] == "Normal skin (UVR)").sum())
+        n_ak = int((frame["stage"] == "Actinic keratosis").sum())
+        n_cscc = int((frame["stage"] == "Cutaneous SCC").sum())
+        rows.append({
+            "animal_id": animal,
+            "n_normal_uvr": n_normal,
+            "n_ak_lesions": n_ak,
+            "n_cscc": n_cscc,
+            "complete_matched_set": n_normal >= 1 and n_ak >= 1 and n_cscc >= 1,
+        })
+    design = pd.DataFrame(rows)
+    complete = bool(not design.empty and design["complete_matched_set"].all())
+    return design, {
+        "animal_id_available": True,
+        "n_animals_identified": int(design["animal_id"].nunique()),
+        "design_ready_for_paired_model": complete,
+        "inference_status": "design_reconstructed_model_not_yet_fitted" if complete
+        else "blocked_incomplete_animal_stage_mapping",
+        "design_notice": (
+            "Animal-level links were extracted from explicit sample characteristics. "
+            "Repeated AK lesions must be handled within animal; no differential-expression "
+            "model is fitted by this workflow."
+        ),
+    }
+
+
+def summarize_geo_counts(
+    counts: pd.DataFrame, metadata: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Return library QC and descriptive target expression without inferential claims."""
     library_sizes = counts.sum(axis=0)
     if (library_sizes <= 0).any():
         raise ValueError("At least one GEO library has zero total counts.")
@@ -107,95 +264,140 @@ def summarize_geo_counts(counts: pd.DataFrame, metadata: pd.DataFrame) -> tuple[
     qc = metadata.copy()
     qc["library_size"] = qc["sample_accession"].map(library_sizes).astype(int)
     qc["detected_features"] = qc["sample_accession"].map((counts > 0).sum()).astype(int)
-    stage_medians = qc.groupby("stage")["library_size"].transform("median")
-    qc["library_size_ratio_to_stage_median"] = qc["library_size"] / stage_medians
-    qc["qc_flag"] = np.where(qc["library_size_ratio_to_stage_median"] < 0.5, "review_low_library_size", "pass")
+    group_medians = qc.groupby("analysis_group")["library_size"].transform("median")
+    qc["library_size_ratio_to_group_median"] = qc["library_size"] / group_medians
+    qc["qc_flag"] = np.where(
+        qc["library_size_ratio_to_group_median"] < 0.5,
+        "review_low_library_size", "pass",
+    )
 
     canonical = {str(gene).casefold(): gene for gene in TARGETS}
-    matches = {feature: canonical[feature.casefold()] for feature in log_cpm.index
-               if feature.casefold() in canonical}
-    if not matches:
-        return (
-            qc,
-            pd.DataFrame(columns=["Gene", "Module", "Stage", "n_samples", "median_log2_cpm", "q1_log2_cpm", "q3_log2_cpm"]),
-            pd.DataFrame(columns=["Gene", "Module", "contrast", "median_log2_cpm_difference", "interpretation"]),
-        )
+    matches = {
+        feature: canonical[feature.casefold()]
+        for feature in log_cpm.index if feature.casefold() in canonical
+    }
     rows = []
     for feature, gene in matches.items():
-        module = TARGETS[gene]
-        for stage in ("Normal skin", "Actinic keratosis", "Cutaneous SCC"):
-            samples = metadata.loc[metadata["stage"].eq(stage), "sample_accession"].tolist()
+        for group, sample_rows in metadata.groupby("analysis_group"):
+            samples = sample_rows["sample_accession"].tolist()
             values = log_cpm.loc[feature, samples].astype(float)
             rows.append({
                 "Gene": gene,
-                "Module": module,
-                "Stage": stage,
+                "Module": TARGETS[gene],
+                "Analysis_group": group,
+                "Stage": sample_rows["stage"].iloc[0],
                 "n_samples": len(samples),
                 "median_log2_cpm": float(values.median()),
                 "q1_log2_cpm": float(values.quantile(.25)),
                 "q3_log2_cpm": float(values.quantile(.75)),
             })
-    summary = pd.DataFrame(rows)
+    summary = pd.DataFrame(rows, columns=SUMMARY_COLUMNS)
     contrasts = []
-    for gene, frame in summary.groupby("Gene"):
-        values = frame.set_index("Stage")["median_log2_cpm"]
-        for left, right, label in (
-            ("Normal skin", "Actinic keratosis", "AK_vs_Normal"),
-            ("Actinic keratosis", "Cutaneous SCC", "cSCC_vs_AK"),
-            ("Normal skin", "Cutaneous SCC", "cSCC_vs_Normal"),
-        ):
-            if left in values and right in values:
-                contrasts.append({
-                    "Gene": gene,
-                    "Module": frame["Module"].iloc[0],
-                    "contrast": label,
-                    "median_log2_cpm_difference": float(values[right] - values[left]),
-                    "interpretation": "Descriptive difference of group medians; not differential-expression inference",
-                })
-    return qc, summary, pd.DataFrame(contrasts)
+    if not summary.empty:
+        for gene, frame in summary.groupby("Gene"):
+            values = frame.set_index("Analysis_group")["median_log2_cpm"]
+            for left, right in (
+                ("Normal skin (UVF)", "Normal skin (UVR)"),
+                ("Normal skin (UVR)", "Actinic keratosis"),
+                ("Actinic keratosis", "Cutaneous SCC"),
+                ("Normal skin (UVF)", "Cutaneous SCC"),
+            ):
+                if left in values and right in values:
+                    contrasts.append({
+                        "Gene": gene,
+                        "Module": frame["Module"].iloc[0],
+                        "contrast": f"{right}_vs_{left}",
+                        "median_log2_cpm_difference": float(values[right] - values[left]),
+                        "interpretation": (
+                            "Descriptive difference of group medians; not differential-expression inference"
+                        ),
+                    })
+    return qc, summary, pd.DataFrame(contrasts, columns=CONTRAST_COLUMNS)
 
 
-def run_transcriptomics(output_dir: Path) -> dict:
-    """Run the independent GEO QC and descriptive target-expression workflow."""
+def run_transcriptomics(
+    output_dir: Path,
+    client: NCBIGEOClient | None = None,
+    cache_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Retrieve GSE158634 from NCBI, validate the sample design and export summaries."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "geo_sample_qc.csv").write_text("", encoding="utf-8")
-    pd.DataFrame(columns=["Gene", "Module", "Stage", "n_samples", "median_log2_cpm", "q1_log2_cpm", "q3_log2_cpm"]).to_csv(output_dir / "geo_target_expression.csv", index=False)
-    pd.DataFrame(columns=["Gene", "Module", "contrast", "median_log2_cpm_difference", "interpretation"]).to_csv(output_dir / "geo_target_contrasts.csv", index=False)
-    status = {
+    cache_dir = cache_dir or RAW_DIR
+    status: dict[str, Any] = {
         "accession": "GSE158634",
         "organism": "Mus musculus",
         "assay": "bulk RNA-seq",
-        "status": "unavailable",
-        "n_samples_expected": len(SAMPLES),
-        "animal_id_available": False,
+        "source": "NCBI GEO E-utilities + official GEO FTP",
+        "status": "not_run",
+        "n_samples_expected": len(EXPECTED_SAMPLES),
         "inference_status": "not_performed",
         "notice": (
-            "Independent mouse cohort. Sample-level summaries are descriptive only; "
-            "animal identifiers are unavailable, so no inferential differential-expression "
-            "or enrichment tests are reported."
+            "Independent mouse cohort; it is never merged with the human mutation cohort. "
+            "Descriptive log2-CPM is not differential-expression inference."
         ),
     }
     try:
-        path = _download_counts(RAW_DIR / GEO_COUNT_FILE)
-        counts, metadata = load_geo_counts(path)
+        resources = _download_geo_sources(cache_dir, client)
+        soft_text = read_gzip_text(resources["soft_path"])
+        metadata, series = parse_geo_family_soft(soft_text)
+        observed = set(metadata["sample_accession"])
+        missing = sorted(EXPECTED_SAMPLES - observed)
+        unexpected = sorted(observed - EXPECTED_SAMPLES)
+        if missing or unexpected:
+            raise ValueError(
+                f"GEO SOFT sample set mismatch; missing={missing}, unexpected={unexpected}"
+            )
+        counts, metadata = load_geo_counts(resources["counts_path"], metadata)
+        if set(counts.columns) != EXPECTED_SAMPLES:
+            raise ValueError("GEO count matrix does not contain the complete expected sample set.")
         qc, summary, contrasts = summarize_geo_counts(counts, metadata)
+        design, design_status = experimental_design(metadata)
+
+        metadata.to_csv(output_dir / "geo_sample_metadata.csv", index=False)
+        design.to_csv(output_dir / "geo_experimental_design.csv", index=False)
         qc.to_csv(output_dir / "geo_sample_qc.csv", index=False)
         summary.to_csv(output_dir / "geo_target_expression.csv", index=False)
         contrasts.to_csv(output_dir / "geo_target_contrasts.csv", index=False)
         status.update({
-            "status": "validated" if len(summary) else "counts_validated_gene_ids_unmapped",
+            "status": "source_data_validated",
             "n_samples": int(counts.shape[1]),
             "n_features": int(counts.shape[0]),
-            "identifier_type": "gene_symbol" if len(summary) else "unresolved",
-            "n_target_genes": int(summary["Gene"].nunique()) if len(summary) else 0,
-            "n_library_qc_rows": len(qc),
+            "n_target_genes": int(summary["Gene"].nunique()) if not summary.empty else 0,
             "n_qc_flagged": int(qc["qc_flag"].ne("pass").sum()),
+            "sample_metadata_source": "GSE158634_family.soft.gz",
+            "count_matrix_source": "GSE158634_3.count.csv.gz",
+            "series_title": series.get("title"),
+            "series_overall_design": " ".join(series.get("overall_design", [])),
+            "sample_set_complete": True,
+            "counts_are_nonnegative_integers": True,
+            "feature_identifier_type": (
+                "gene_symbol" if summary["Gene"].nunique() else "unresolved"
+            ),
+            "genome_build": "not established from the downloaded metadata",
+            "entrez_uid_count": len(resources.get("entrez_uids", [])),
+            **design_status,
+            "inference_status": design_status["inference_status"],
+            "notice": (
+                "NCBI sample metadata and integer count matrix were retrieved and reconciled. "
+                "The workflow reports descriptive expression only. No DE model is run until "
+                "the animal-level experimental unit is explicitly reconstructed and reviewed."
+            ),
         })
-    except (OSError, ValueError, KeyError, ImportError) as exc:
-        LOGGER.warning("GSE158634 layer was not integrated: %s", exc)
-        status["status"] = "validation_failed"
-        status["validation_message"] = str(exc)
-        pd.DataFrame(columns=["sample_accession", "sample_title", "stage", "animal_id", "experimental_unit_note", "library_size", "detected_features", "library_size_ratio_to_stage_median", "qc_flag"]).to_csv(output_dir / "geo_sample_qc.csv", index=False)
+    except Exception as exc:
+        LOGGER.exception("GSE158634 NCBI integration failed")
+        status.update({
+            "status": "retrieval_or_validation_failed",
+            "validation_message": str(exc),
+            "inference_status": "not_performed",
+        })
+        for filename, columns in (
+            ("geo_sample_metadata.csv", ["sample_accession", "sample_title"]),
+            ("geo_experimental_design.csv", ["animal_id", "complete_matched_set"]),
+            ("geo_sample_qc.csv", ["sample_accession", "stage", "library_size", "qc_flag"]),
+            ("geo_target_expression.csv", SUMMARY_COLUMNS),
+            ("geo_target_contrasts.csv", CONTRAST_COLUMNS),
+        ):
+            pd.DataFrame(columns=columns).to_csv(output_dir / filename, index=False)
     (output_dir / "geo_transcriptomics_status.json").write_text(
         json.dumps(status, indent=2, ensure_ascii=False), encoding="utf-8"
     )

@@ -1,16 +1,13 @@
-"""Public data download, parsing, and schema validation."""
+"""Public mutation-data download, parsing, and schema validation."""
 from __future__ import annotations
 
-import gzip
 import logging
-from io import StringIO
 from pathlib import Path
 
 import pandas as pd
 import requests
 
 from akstats.config import (
-    GEO_MATRIX_URL,
     PANEL_HEADER_ROW,
     PANEL_SHEET,
     PANEL_URL,
@@ -22,7 +19,6 @@ from akstats.config import (
 
 LOGGER = logging.getLogger(__name__)
 
-# Original supplementary workbooks committed to data/raw/.
 PANEL_SOURCE_FILENAME = "41467_2025_65687_MOESM8_ESM.xlsx"
 VARIANTS_SOURCE_FILENAME = "41467_2025_65687_MOESM9_ESM.xlsx"
 
@@ -83,58 +79,3 @@ def load_mutation_sources() -> tuple[pd.DataFrame, pd.DataFrame]:
     variants = variants.dropna(subset=["Case", "Hugo_Symbol"]).copy()
     validate_mutation_columns(panel, variants)
     return panel, variants
-
-
-def load_geo_series_matrix() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Parse GEO metadata and probe-level expression matrix; no gene mapping is assumed."""
-    path = download_file(GEO_MATRIX_URL, RAW_DIR / "GSE158634_series_matrix.txt.gz")
-    metadata_lines, matrix_lines, in_matrix = [], [], False
-    with gzip.open(path, "rt", encoding="utf-8") as handle:
-        for line in handle:
-            if line.startswith("!series_matrix_table_begin"):
-                in_matrix = True
-                continue
-            if line.startswith("!series_matrix_table_end"):
-                break
-            if in_matrix and not line.startswith("!"):
-                matrix_lines.append(line)
-            elif not in_matrix and line.startswith((
-                "!Sample_title", "!Sample_geo_accession", "!Sample_source_name_ch1",
-                "!Sample_characteristics_ch1",
-            )):
-                metadata_lines.append(line)
-    if not matrix_lines:
-        raise ValueError("GEO series matrix has no expression table.")
-    parsed: dict[str, list[str]] = {}
-    for line in metadata_lines:
-        fields = line.rstrip("\n").split("\t")
-        key = fields[0].lstrip("!")
-        values = [value.strip('"') for value in fields[1:]]
-        if key in parsed:
-            parsed[key] = [f"{old}; {new}" for old, new in zip(parsed[key], values)]
-        else:
-            parsed[key] = values
-    metadata = pd.DataFrame(parsed)
-    if "Sample_geo_accession" not in metadata:
-        raise ValueError("GEO metadata is missing Sample_geo_accession.")
-    metadata = metadata.set_index("Sample_geo_accession")
-    metadata["Clinical_group"] = metadata.apply(_clinical_group, axis=1)
-    expression = pd.read_csv(StringIO("".join(matrix_lines)), sep="\t")
-    if "ID_REF" not in expression:
-        raise ValueError("GEO expression matrix is missing ID_REF.")
-    expression = expression.set_index("ID_REF").apply(pd.to_numeric, errors="coerce")
-    common = metadata.index.intersection(expression.columns)
-    if common.empty:
-        raise ValueError("No sample IDs overlap between GEO metadata and expression matrix.")
-    return metadata.loc[common], expression.loc[:, common]
-
-
-def _clinical_group(row: pd.Series) -> str:
-    text = " ".join(str(value).lower() for value in row.astype(str).values)
-    if "normal" in text:
-        return "Normal skin"
-    if "actinic" in text:
-        return "Actinic keratosis"
-    if "squamous" in text or "scc" in text:
-        return "Cutaneous SCC"
-    return "Unclassified"
