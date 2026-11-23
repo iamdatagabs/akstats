@@ -639,6 +639,8 @@ def run_transcriptomics(
             ),
             **_metadata_consistency(metadata),
             "n_biosample_records": len(biosample_records),
+            "n_exposure_metadata_conflicts": int(metadata["exposure_metadata_conflict"].sum()),
+            "n_animal_id_metadata_conflicts": int(metadata["animal_id_metadata_conflict"].sum()),
             "biosample_enrichment_error": biosample_error,
             "n_sra_experiments_retrieved": len(sra_records),
             "sra_enrichment_error": sra_error,
