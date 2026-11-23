@@ -646,6 +646,7 @@ def run_transcriptomics(
             "n_animal_id_metadata_conflicts": int(metadata["animal_id_metadata_conflict"].sum()),
             "biosample_enrichment_error": biosample_error,
             "n_sra_experiments_retrieved": len(sra_records),
+            "n_sra_sample_accessions": int(metadata["sra_sample_accession"].notna().sum()),
             "sra_enrichment_error": sra_error,
             "sra_instrument_models": sorted(set(metadata["sra_instrument_model"].dropna().astype(str))),
             "normal_exposure_unknown_samples": int((metadata["analysis_group"] == "Normal skin (exposure unknown)").sum()),
