@@ -4,6 +4,7 @@ from __future__ import annotations
 import gzip
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -49,6 +50,8 @@ class NCBIGEOClient:
         self.api_key = api_key or os.getenv("NCBI_API_KEY")
         self.tool = tool
         self.timeout = timeout
+        self._eutils_interval = 1 / (10 if self.api_key else 3)
+        self._last_eutils_request = 0.0
         self.session = session or requests.Session()
         retry = Retry(
             total=4,
@@ -70,6 +73,11 @@ class NCBIGEOClient:
         return result
 
     def _get(self, url: str, params: dict[str, Any] | None = None) -> requests.Response:
+        if url.startswith(EUTILS_BASE):
+            elapsed = time.monotonic() - self._last_eutils_request
+            if elapsed < self._eutils_interval:
+                time.sleep(self._eutils_interval - elapsed)
+            self._last_eutils_request = time.monotonic()
         try:
             response = self.session.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
