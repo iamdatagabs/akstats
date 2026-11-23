@@ -55,14 +55,15 @@ def _stage_from_text(text: str) -> str:
 
 
 def _exposure_from_characteristics(characteristics: dict[str, list[str]]) -> str | None:
+    candidates = set()
     for key, values in characteristics.items():
         if any(token in key for token in ("uv", "treatment", "exposure", "irradiation")):
             value = " ".join(values).casefold()
             if re.search(r"\buvf\b|unirradiated|non.?irradiated|no uv|without uv", value):
-                return "UVF"
+                candidates.add("UVF")
             if re.search(r"\buvr\b|irradiated|uv.?exposed|ultraviolet", value):
-                return "UVR"
-    return None
+                candidates.add("UVR")
+    return next(iter(candidates)) if len(candidates) == 1 else None
 
 
 def _animal_from_characteristics(characteristics: dict[str, list[str]]) -> str | None:
