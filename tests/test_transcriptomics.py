@@ -4,6 +4,7 @@ import pandas as pd
 from akstats.transcriptomics import (
     EXPECTED_SAMPLES,
     _metadata_consistency,
+    build_publication_candidate_crosswalk,
     experimental_design,
     load_geo_counts,
     merge_biosample_metadata,
@@ -130,8 +131,9 @@ def test_biosample_metadata_enriches_only_explicit_exposure_and_animal_fields():
     })
     row = enriched.loc[enriched["sample_accession"].eq(accession)].iloc[0]
     assert row["animal_id"] == "07"
-    assert row["exposure_group"] == "UVR"
-    assert row["analysis_group"] == "Normal skin (UVR)"
+    assert pd.isna(row["exposure_group"])
+    assert row["exposure_metadata_conflict"] is True
+    assert row["analysis_group"] == "Normal skin (exposure unknown)"
 
 
 def test_metadata_consistency_flags_conflicting_genome_and_instrument_records():
@@ -162,3 +164,51 @@ def test_sra_metadata_enriches_only_explicit_experiment_relations():
     row = enriched.loc[enriched["sample_accession"].eq(first["sample_accession"])].iloc[0]
     assert row["sra_instrument_model"] == "Illumina HiSeq 2500"
     assert row["biosample_accession"] == "SAMN12345678"
+
+
+
+def test_publication_candidate_crosswalk_is_complete_but_not_verified():
+    titles = [
+        "NS_001", "NS_002", "NS_004", "NS_005",
+        "NS_006", "NS_007", "NS_008", "NS_009",
+        *[f"AK_{number}" for number in range(10, 18)],
+        *[f"cSCC_{number}" for number in range(18, 22)],
+    ]
+    stages = (
+        ["Normal skin"] * 8
+        + ["Actinic keratosis"] * 8
+        + ["Cutaneous SCC"] * 4
+    )
+    metadata = pd.DataFrame({"sample_title": titles, "stage": stages})
+    crosswalk, design = build_publication_candidate_crosswalk(metadata)
+
+    assert len(crosswalk.loc[
+        crosswalk["publication_candidate_animal_id"].notna()
+    ]) == 20
+    assert len(design) == 4
+    assert design["n_normal_uvr"].eq(1).all()
+    assert design["n_ak_lesions"].eq(2).all()
+    assert design["n_cscc"].eq(1).all()
+    assert design["complete_candidate_matched_set"].all()
+    assert design["verification_status"].eq("provisional_not_for_inference").all()
+    assert crosswalk["publication_crosswalk_review_required"].all()
+    assert "animal_id" not in crosswalk.columns
+
+
+
+def test_biosample_can_supply_exposure_when_geo_soft_does_not():
+    metadata, _ = parse_geo_family_soft(_soft_fixture(include_animals=False))
+    accession = metadata.loc[0, "sample_accession"]
+    biosample_accession = metadata.loc[0, "biosample_accession"]
+    metadata.loc[0, "characteristics_json"] = '{"tissue": ["skin"]}'
+    metadata.loc[0, "exposure_group"] = None
+    enriched = merge_biosample_metadata(metadata, {
+        biosample_accession: {
+            "accession": biosample_accession,
+            "attributes": {"treatment": ["UVR"]},
+        }
+    })
+    row = enriched.loc[enriched["sample_accession"].eq(accession)].iloc[0]
+    assert row["exposure_group"] == "UVR"
+    assert row["analysis_group"] == "Normal skin (UVR)"
+    assert row["exposure_metadata_conflict"] is False

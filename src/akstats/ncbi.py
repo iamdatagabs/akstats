@@ -172,10 +172,33 @@ class NCBIGEOClient:
                 (node for node in package.iter() if node.tag.endswith("SAMPLE")),
                 None,
             )
+            sra_sample_accession = sample.attrib.get("accession") if sample is not None else None
+            biosample_accession = None
+            if sample is not None:
+                for identifier in sample.iter():
+                    if (
+                        identifier.tag.endswith("EXTERNAL_ID")
+                        and "biosample" in identifier.attrib.get("namespace", "").casefold()
+                    ):
+                        biosample_accession = (identifier.text or "").strip() or None
+                    if identifier.tag.endswith("SAMPLE_ATTRIBUTE"):
+                        tag = next(
+                            ((child.text or "").strip().casefold() for child in identifier
+                             if child.tag.endswith("TAG")),
+                            "",
+                        )
+                        value = next(
+                            ((child.text or "").strip() for child in identifier
+                             if child.tag.endswith("VALUE")),
+                            "",
+                        )
+                        if tag in {"biosample", "biosample accession"} and value.startswith("SAMN"):
+                            biosample_accession = value
             records[accession] = {
                 "accession": accession,
                 "instrument_model": instrument,
-                "biosample_accession": sample.attrib.get("accession") if sample is not None else None,
+                "sra_sample_accession": sra_sample_accession,
+                "biosample_accession": biosample_accession,
             }
         return records
 

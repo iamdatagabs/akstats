@@ -58,7 +58,9 @@ def test_ncbi_client_fetches_sra_instrument_and_biosample_link():
             b'<EXPERIMENT accession="SRX0000001"><PLATFORM><ILLUMINA>'
             b'<INSTRUMENT_MODEL>Illumina HiSeq 2500</INSTRUMENT_MODEL>'
             b'</ILLUMINA></PLATFORM></EXPERIMENT>'
-            b'<SAMPLE accession="SAMN00000001"/></EXPERIMENT_PACKAGE>'
+            b'<SAMPLE accession="SRS00000001"><IDENTIFIERS>'
+            b'<EXTERNAL_ID namespace="BioSample">SAMN00000001</EXTERNAL_ID>'
+            b'</IDENTIFIERS></SAMPLE></EXPERIMENT_PACKAGE>'
             b'</EXPERIMENT_PACKAGE_SET>'
         )
 
@@ -78,4 +80,5 @@ def test_ncbi_client_fetches_sra_instrument_and_biosample_link():
     client = NCBIGEOClient(session=Session())
     records = client.fetch_sra_experiments(["SRX0000001"])
     assert records["SRX0000001"]["instrument_model"] == "Illumina HiSeq 2500"
+    assert records["SRX0000001"]["sra_sample_accession"] == "SRS00000001"
     assert records["SRX0000001"]["biosample_accession"] == "SAMN00000001"

@@ -55,14 +55,15 @@ def _stage_from_text(text: str) -> str:
 
 
 def _exposure_from_characteristics(characteristics: dict[str, list[str]]) -> str | None:
+    candidates = set()
     for key, values in characteristics.items():
         if any(token in key for token in ("uv", "treatment", "exposure", "irradiation")):
             value = " ".join(values).casefold()
             if re.search(r"\buvf\b|unirradiated|non.?irradiated|no uv|without uv", value):
-                return "UVF"
+                candidates.add("UVF")
             if re.search(r"\buvr\b|irradiated|uv.?exposed|ultraviolet", value):
-                return "UVR"
-    return None
+                candidates.add("UVR")
+    return next(iter(candidates)) if len(candidates) == 1 else None
 
 
 def _animal_from_characteristics(characteristics: dict[str, list[str]]) -> str | None:
@@ -116,6 +117,7 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
                 "sample_accession": current["sample_accession"],
                 "biosample_accession": biosample_match.group(1) if biosample_match else None,
                 "sra_experiment_accession": sra_match.group(0) if sra_match else None,
+                "sra_sample_accession": None,
                 "sra_instrument_model": None,
                 "sample_title": title,
                 "stage": stage,
@@ -182,11 +184,13 @@ def merge_sra_metadata(
 ) -> pd.DataFrame:
     """Join SRA experiment details to GEO samples using explicit SRX relations."""
     result = metadata.copy()
+    result["sra_sample_accession"] = None
     for index, row in result.iterrows():
         accession = row.get("sra_experiment_accession")
         record = records.get(accession) if pd.notna(accession) else None
         if not record:
             continue
+        result.at[index, "sra_sample_accession"] = record.get("sra_sample_accession")
         if record.get("biosample_accession") and pd.isna(row.get("biosample_accession")):
             result.at[index, "biosample_accession"] = record["biosample_accession"]
         result.at[index, "sra_instrument_model"] = record.get("instrument_model")
@@ -200,6 +204,8 @@ def merge_biosample_metadata(
     """Enrich GEO SOFT rows with explicit attributes from linked NCBI BioSamples."""
     result = metadata.copy()
     result["biosample_attributes_json"] = "{}"
+    result["exposure_metadata_conflict"] = False
+    result["animal_id_metadata_conflict"] = False
     for index, row in result.iterrows():
         accession = row.get("biosample_accession")
         record = records.get(accession) if pd.notna(accession) else None
@@ -209,18 +215,34 @@ def merge_biosample_metadata(
         result.at[index, "biosample_attributes_json"] = json.dumps(
             attributes, ensure_ascii=False, sort_keys=True
         )
-        merged = {}
         try:
-            merged.update(json.loads(row.get("characteristics_json") or "{}"))
+            soft_characteristics = json.loads(row.get("characteristics_json") or "{}")
         except (TypeError, ValueError):
-            pass
+            soft_characteristics = {}
+        soft_exposure = _exposure_from_characteristics(soft_characteristics)
+        biosample_exposure = _exposure_from_characteristics(attributes)
+        exposure_conflict = bool(
+            soft_exposure and biosample_exposure and soft_exposure != biosample_exposure
+        )
+        soft_animal = _animal_from_characteristics(soft_characteristics)
+        biosample_animal = _animal_from_characteristics(attributes)
+        animal_conflict = bool(
+            soft_animal and biosample_animal and soft_animal != biosample_animal
+        )
+        merged = dict(soft_characteristics)
         for key, values in attributes.items():
             merged.setdefault(key, []).extend(values)
-        exposure = _exposure_from_characteristics(merged)
-        animal_id = _animal_from_characteristics(merged)
-        if exposure:
+        exposure = None if exposure_conflict else (biosample_exposure or soft_exposure)
+        animal_id = None if animal_conflict else (biosample_animal or soft_animal)
+        result.at[index, "exposure_metadata_conflict"] = exposure_conflict
+        result.at[index, "animal_id_metadata_conflict"] = animal_conflict
+        if exposure_conflict:
+            result.at[index, "exposure_group"] = None
+        elif exposure:
             result.at[index, "exposure_group"] = exposure
-        if animal_id:
+        if animal_conflict:
+            result.at[index, "animal_id"] = None
+        elif animal_id:
             result.at[index, "animal_id"] = animal_id
         if result.at[index, "stage"] == "Normal skin":
             result.at[index, "analysis_group"] = (
@@ -258,8 +280,9 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
     else:
         build_status = "not_reported"
     platform_warning = (
-        "GEO platform GPL18480 is titled Illumina HiSeq 1500, while sample processing "
-        "text mentions HiSeq 2500; verify against the source publication."
+        "GEO platform GPL18480 and linked SRA records report Illumina HiSeq 1500; "
+        "sample processing text mentions HiSeq 2500, while the article methods report "
+        "NextSeq 500 (PMID 33664254). Verify the sequencing instrument before reuse."
         if "GPL18480" in platform_ids and any("2500" in item for item in instruments)
         else None
     )
@@ -270,6 +293,7 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
         ),
         "genome_build_consistency": build_status,
         "instrument_models_reported": instruments,
+        "publication_instrument_reported": "Illumina NextSeq 500 (PMID 33664254)",
         "platform_ids": platform_ids,
         "platform_instrument_warning": platform_warning,
     }
@@ -320,6 +344,109 @@ def load_geo_counts(
     if counts.index.duplicated().any():
         counts = counts.groupby(level=0).sum()
     return counts, metadata.copy()
+
+
+def build_publication_candidate_crosswalk(
+    metadata: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Create a provisional GSM-to-publication sample crosswalk for human review.
+
+    The publication reports four UVF controls and four UVR animals, each with
+    normal skin, AK-1, AK-2 and cSCC. GEO title numbering follows that same
+    block order, but the paper does not publish an explicit GSM-to-subject key.
+    Therefore these assignments are candidates only and are never copied into
+    the verified animal_id/exposure_group columns used by inferential models.
+    """
+    result = metadata.copy()
+    candidate_columns = {
+        "publication_candidate_animal_id": None,
+        "publication_candidate_exposure_group": None,
+        "publication_candidate_subject": None,
+        "publication_candidate_sample_name": None,
+        "publication_crosswalk_status": "unmapped",
+        "publication_crosswalk_basis": (
+            "Provisional alignment of GEO sample-title numbering to Table 2 "
+            "sample order in PMID 33664254; not an author-confirmed GSM crosswalk."
+        ),
+        "publication_crosswalk_review_required": True,
+    }
+    for column, default in candidate_columns.items():
+        result[column] = default
+
+    normal_map = {
+        "NS_001": ("UVF_1", "UVF", 1, "NC-1"),
+        "NS_002": ("UVF_2", "UVF", 2, "NC-2"),
+        "NS_004": ("UVF_3", "UVF", 3, "NC-3"),
+        "NS_005": ("UVF_4", "UVF", 4, "NC-4"),
+        "NS_006": ("UVR_1", "UVR", 5, "1-NC"),
+        "NS_007": ("UVR_2", "UVR", 6, "2-NC"),
+        "NS_008": ("UVR_3", "UVR", 7, "3-NC"),
+        "NS_009": ("UVR_4", "UVR", 8, "4-NC"),
+    }
+    for index, row in result.iterrows():
+        title = str(row.get("sample_title", "")).strip()
+        assignment = normal_map.get(title)
+        if assignment:
+            animal, exposure, subject, paper_name = assignment
+            role = "Normal skin"
+        else:
+            ak_match = re.fullmatch(r"AK_(\d+)", title, re.IGNORECASE)
+            cscc_match = re.fullmatch(r"cSCC_(\d+)", title, re.IGNORECASE)
+            if ak_match:
+                number = int(ak_match.group(1))
+                if 10 <= number <= 17:
+                    mouse = (number - 10) // 2 + 1
+                    lesion = 1 if (number - 10) % 2 == 0 else 2
+                    assignment = (
+                        f"UVR_{mouse}", "UVR", mouse + 4,
+                        f"{mouse}-AK-{lesion}",
+                    )
+                    role = f"AK-{lesion}"
+            elif cscc_match:
+                number = int(cscc_match.group(1))
+                if 18 <= number <= 21:
+                    mouse = number - 17
+                    assignment = (
+                        f"UVR_{mouse}", "UVR", mouse + 4, f"{mouse}-cSCC",
+                    )
+                    role = "cSCC"
+            if not assignment:
+                continue
+        animal, exposure, subject, paper_name = assignment
+        result.at[index, "publication_candidate_animal_id"] = animal
+        result.at[index, "publication_candidate_exposure_group"] = exposure
+        result.at[index, "publication_candidate_subject"] = subject
+        result.at[index, "publication_candidate_sample_name"] = paper_name
+        result.at[index, "publication_candidate_sample_role"] = role
+        result.at[index, "publication_crosswalk_status"] = "provisional_publication_order_match"
+
+    candidate = result.loc[
+        result["publication_candidate_animal_id"].notna()
+    ].copy()
+    design_rows = []
+    exposed = candidate.loc[
+        candidate["publication_candidate_exposure_group"].eq("UVR")
+    ]
+    for animal, frame in exposed.groupby("publication_candidate_animal_id"):
+        n_normal = int((frame["stage"] == "Normal skin").sum())
+        n_ak = int((frame["stage"] == "Actinic keratosis").sum())
+        n_cscc = int((frame["stage"] == "Cutaneous SCC").sum())
+        design_rows.append({
+            "candidate_animal_id": animal,
+            "candidate_subject": int(frame["publication_candidate_subject"].iloc[0]),
+            "n_normal_uvr": n_normal,
+            "n_ak_lesions": n_ak,
+            "n_cscc": n_cscc,
+            "complete_candidate_matched_set": (
+                n_normal == 1 and n_ak == 2 and n_cscc == 1
+            ),
+            "verification_status": "provisional_not_for_inference",
+        })
+    return result, pd.DataFrame(design_rows, columns=[
+        "candidate_animal_id", "candidate_subject", "n_normal_uvr",
+        "n_ak_lesions", "n_cscc", "complete_candidate_matched_set",
+        "verification_status",
+    ])
 
 
 def experimental_design(metadata: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -477,6 +604,7 @@ def run_transcriptomics(
             biosample_records = {}
             biosample_error = str(exc)
         metadata = merge_biosample_metadata(metadata, biosample_records)
+        metadata, candidate_design = build_publication_candidate_crosswalk(metadata)
         observed = set(metadata["sample_accession"])
         missing = sorted(EXPECTED_SAMPLES - observed)
         unexpected = sorted(observed - EXPECTED_SAMPLES)
@@ -492,6 +620,10 @@ def run_transcriptomics(
 
         metadata.to_csv(output_dir / "geo_sample_metadata.csv", index=False)
         design.to_csv(output_dir / "geo_experimental_design.csv", index=False)
+        metadata.loc[metadata["publication_candidate_animal_id"].notna()].to_csv(
+            output_dir / "geo_publication_candidate_crosswalk.csv", index=False
+        )
+        candidate_design.to_csv(output_dir / "geo_publication_candidate_design.csv", index=False)
         qc.to_csv(output_dir / "geo_sample_qc.csv", index=False)
         summary.to_csv(output_dir / "geo_target_expression.csv", index=False)
         contrasts.to_csv(output_dir / "geo_target_contrasts.csv", index=False)
@@ -512,14 +644,21 @@ def run_transcriptomics(
             ),
             **_metadata_consistency(metadata),
             "n_biosample_records": len(biosample_records),
+            "n_exposure_metadata_conflicts": int(metadata["exposure_metadata_conflict"].sum()),
+            "n_animal_id_metadata_conflicts": int(metadata["animal_id_metadata_conflict"].sum()),
             "biosample_enrichment_error": biosample_error,
             "n_sra_experiments_retrieved": len(sra_records),
+            "n_sra_sample_accessions": int(metadata["sra_sample_accession"].notna().sum()),
             "sra_enrichment_error": sra_error,
             "sra_instrument_models": sorted(set(metadata["sra_instrument_model"].dropna().astype(str))),
             "normal_exposure_unknown_samples": int((metadata["analysis_group"] == "Normal skin (exposure unknown)").sum()),
             "normal_samples_split_by_exposure": bool(metadata.loc[metadata["stage"].eq("Normal skin"), "exposure_group"].notna().all()),
             "analysis_group_counts": metadata["analysis_group"].value_counts().to_dict(),
             "publication_design_reference": "PMID:33664254; eight mice split into UVF/UVR groups, with repeated tissues collected from UVR mice",
+            "publication_candidate_crosswalk_samples": int(metadata["publication_candidate_animal_id"].notna().sum()),
+            "publication_candidate_crosswalk_verified": False,
+            "publication_candidate_uvr_animals_complete": bool(not candidate_design.empty and candidate_design["complete_candidate_matched_set"].all()),
+            "publication_candidate_crosswalk_notice": "Provisional alignment of GEO title numbering to publication Table 2; do not use as verified animal metadata or for differential-expression inference.",
             "entrez_uid_count": len(resources.get("entrez_uids", [])),
             **design_status,
             "inference_status": design_status["inference_status"],
@@ -527,8 +666,9 @@ def run_transcriptomics(
                 "NCBI sample metadata and integer count matrix were retrieved and reconciled. "
                 "The deposited SOFT records do not currently expose animal IDs or UVF/UVR labels "
                 "for each sample. The publication describes eight mice split between UVF and UVR, "
-                "but sample-to-animal links are not inferred from title order. Descriptive expression "
-                "only; no DE model is run until the animal-level design is explicitly reconstructed."
+                "but sample-to-animal links are not accepted from title order as verified metadata. "
+                "A separate provisional crosswalk is exported for review only. Descriptive expression "
+                "only; no DE model is run until the author-confirmed animal-level design is reconstructed."
             ),
         })
     except (NCBIError, OSError, ValueError, KeyError, TypeError, ImportError) as exc:
@@ -541,6 +681,8 @@ def run_transcriptomics(
         for filename, columns in (
             ("geo_sample_metadata.csv", ["sample_accession", "sample_title"]),
             ("geo_experimental_design.csv", ["animal_id", "complete_matched_set"]),
+            ("geo_publication_candidate_crosswalk.csv", ["sample_accession", "sample_title", "publication_candidate_animal_id", "publication_crosswalk_status"]),
+            ("geo_publication_candidate_design.csv", ["candidate_animal_id", "complete_candidate_matched_set"]),
             ("geo_sample_qc.csv", ["sample_accession", "stage", "library_size", "qc_flag"]),
             ("geo_target_expression.csv", SUMMARY_COLUMNS),
             ("geo_target_contrasts.csv", CONTRAST_COLUMNS),

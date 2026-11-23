@@ -8,7 +8,7 @@ AKStats retrieves GSE158634 from the official NCBI GEO distribution.
 2. `summarize_geo_series()` retrieves Entrez summaries with ESummary when a GEO DataSet UID is available.
 3. `fetch_series_soft()` downloads `GSE158634_family.soft.gz` from the GEO FTP directory. This file is the source of sample titles, characteristics, exposure labels, animal identifiers (when deposited), platform and processing notes.
 4. `fetch_count_matrix()` downloads `GSE158634_3.count.csv.gz`, the supplementary count matrix.
-5. Linked SRA experiments (when present in GEO sample relations) are retrieved through EFetch (`db=sra`) to inspect instrument models and BioSample links.
+5. Linked SRA experiments (when present in GEO sample relations) are retrieved through EFetch (`db=sra`) to inspect instrument models, SRA sample accessions (`SRS`) and external BioSample accessions (`SAMN`). These identifier types are stored separately.
 6. Linked BioSample accessions are enriched through EFetch (`db=biosample`) to recover explicit animal/treatment attributes.
 7. `transcriptomics.run_transcriptomics()` reconciles the sample accessions, checks non-negative integer counts, exports sample-level QC and builds an animal-level design audit.
 
@@ -49,12 +49,13 @@ Do not commit API keys. Set them as environment variables or repository secrets.
 
 - Sample groups are parsed from the family SOFT metadata; the expected GSM list is used only as a completeness check.
 - Normal UVF and UVR samples are kept distinct when exposure is explicitly recorded.
-- Animal IDs are extracted only from explicit animal/mouse/subject characteristics. The numeric suffix in a sample title is not treated as an animal identifier.
+- Verified animal IDs are extracted only from explicit animal/mouse/subject characteristics or linked BioSample attributes. The numeric suffix in a sample title is not treated as a verified animal identifier.
+- A provisional crosswalk aligns GEO title numbering with Table 2 of PMID 33664254 (four UVF controls; four UVR animals with matched NS, AK-1, AK-2 and cSCC samples). It is exported separately for manual review and never used for inference.
 - Multiple AK lesions from one animal are repeated observations, not independent biological replicates.
 - No sample is removed solely because its library-size QC flag is raised.
 - Gene-symbol mapping is exact and case-insensitive. Ensembl identifiers are not guessed.
 - Genome assembly and annotation release are audited across source statements. The current SOFT processing text mentions both hg19 and mm9; this conflict is surfaced and must not be silently resolved.
-- GPL18480 is labelled HiSeq 1500, while a sample processing note mentions HiSeq 2500. Verify this platform/instrument discrepancy against the publication.
+- GEO/SRA report HiSeq 1500, the SOFT processing note mentions HiSeq 2500, and the article methods report NextSeq 500 (PMID 33664254). Verify this three-way instrument discrepancy before reuse.
 - The current implementation reports descriptive log2-CPM summaries only. Inferential differential-expression modeling remains blocked until the animal-level design is reconstructed and reviewed.
 
 ## NCBI references
