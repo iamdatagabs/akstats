@@ -418,7 +418,11 @@ def build_publication_candidate_crosswalk(
             ),
             "verification_status": "provisional_not_for_inference",
         })
-    return result, pd.DataFrame(design_rows)
+    return result, pd.DataFrame(design_rows, columns=[
+        "candidate_animal_id", "candidate_subject", "n_normal_uvr",
+        "n_ak_lesions", "n_cscc", "complete_candidate_matched_set",
+        "verification_status",
+    ])
 
 
 def experimental_design(metadata: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
