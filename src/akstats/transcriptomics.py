@@ -201,6 +201,8 @@ def merge_biosample_metadata(
     """Enrich GEO SOFT rows with explicit attributes from linked NCBI BioSamples."""
     result = metadata.copy()
     result["biosample_attributes_json"] = "{}"
+    result["exposure_metadata_conflict"] = False
+    result["animal_id_metadata_conflict"] = False
     for index, row in result.iterrows():
         accession = row.get("biosample_accession")
         record = records.get(accession) if pd.notna(accession) else None
@@ -210,18 +212,34 @@ def merge_biosample_metadata(
         result.at[index, "biosample_attributes_json"] = json.dumps(
             attributes, ensure_ascii=False, sort_keys=True
         )
-        merged = {}
         try:
-            merged.update(json.loads(row.get("characteristics_json") or "{}"))
+            soft_characteristics = json.loads(row.get("characteristics_json") or "{}")
         except (TypeError, ValueError):
-            pass
+            soft_characteristics = {}
+        soft_exposure = _exposure_from_characteristics(soft_characteristics)
+        biosample_exposure = _exposure_from_characteristics(attributes)
+        exposure_conflict = bool(
+            soft_exposure and biosample_exposure and soft_exposure != biosample_exposure
+        )
+        soft_animal = _animal_from_characteristics(soft_characteristics)
+        biosample_animal = _animal_from_characteristics(attributes)
+        animal_conflict = bool(
+            soft_animal and biosample_animal and soft_animal != biosample_animal
+        )
+        merged = dict(soft_characteristics)
         for key, values in attributes.items():
             merged.setdefault(key, []).extend(values)
-        exposure = _exposure_from_characteristics(merged)
-        animal_id = _animal_from_characteristics(merged)
-        if exposure:
+        exposure = None if exposure_conflict else (biosample_exposure or soft_exposure)
+        animal_id = None if animal_conflict else (biosample_animal or soft_animal)
+        result.at[index, "exposure_metadata_conflict"] = exposure_conflict
+        result.at[index, "animal_id_metadata_conflict"] = animal_conflict
+        if exposure_conflict:
+            result.at[index, "exposure_group"] = None
+        elif exposure:
             result.at[index, "exposure_group"] = exposure
-        if animal_id:
+        if animal_conflict:
+            result.at[index, "animal_id"] = None
+        elif animal_id:
             result.at[index, "animal_id"] = animal_id
         if result.at[index, "stage"] == "Normal skin":
             result.at[index, "analysis_group"] = (
