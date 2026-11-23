@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from akstats.analysis import gene_level_maf
+
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "outputs"
 DESTINATION = ROOT / "docs" / "data" / "dashboard.json"
@@ -18,31 +20,6 @@ def records(filename: str) -> list[dict]:
         raise FileNotFoundError(f"Required research output is missing: {path}")
     frame = pd.read_csv(path)
     return json.loads(frame.to_json(orient="records"))
-
-
-def summarize_gene_maf(axis: pd.DataFrame) -> pd.DataFrame:
-    """Summarize variant MAF by gene, pathway module, biological group and stage."""
-    required = {"Hugo_Symbol", "Module", "Biological_group", "Normal_MAF", "AK_MAF", "SCC_MAF"}
-    missing = required - set(axis.columns)
-    if missing:
-        raise ValueError(f"Filtered variant table is missing columns: {sorted(missing)}")
-    long = axis.melt(
-        id_vars=["Hugo_Symbol", "Module", "Biological_group"],
-        value_vars=["Normal_MAF", "AK_MAF", "SCC_MAF"],
-        var_name="Stage",
-        value_name="MAF",
-    )
-    long["Stage"] = long["Stage"].str.removesuffix("_MAF")
-    summary = long.groupby(
-        ["Hugo_Symbol", "Module", "Biological_group", "Stage"], dropna=False, observed=True
-    )["MAF"].agg(
-        n_variants="count",
-        mean="mean",
-        median="median",
-        q1=lambda values: values.quantile(0.25),
-        q3=lambda values: values.quantile(0.75),
-    ).reset_index()
-    return summary.rename(columns={"Hugo_Symbol": "Gene"})
 
 
 def main() -> None:
@@ -61,7 +38,7 @@ def main() -> None:
     # Keep each analytical level distinct: group-level MAF, module-level ΔMAF,
     # and gene-level MAF. Never assign one arbitrary module to an entire group.
     axis = pd.read_csv(ROOT / "data" / "processed" / "arid2_mapk_variants.csv")
-    gene_maf = summarize_gene_maf(axis)
+    gene_maf = gene_level_maf(axis)
 
     DESTINATION.parent.mkdir(parents=True, exist_ok=True)
     payload = {
