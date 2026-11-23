@@ -48,3 +48,34 @@ def test_ncbi_client_fetches_biosample_attributes_as_xml():
         "animal_id": ["Mouse 01"],
         "treatment": ["UVR"],
     }
+
+
+
+def test_ncbi_client_fetches_sra_instrument_and_biosample_link():
+    class Response:
+        content = (
+            b'<EXPERIMENT_PACKAGE_SET><EXPERIMENT_PACKAGE>'
+            b'<EXPERIMENT accession="SRX0000001"><PLATFORM><ILLUMINA>'
+            b'<INSTRUMENT_MODEL>Illumina HiSeq 2500</INSTRUMENT_MODEL>'
+            b'</ILLUMINA></PLATFORM></EXPERIMENT>'
+            b'<SAMPLE accession="SAMN00000001"/></EXPERIMENT_PACKAGE>'
+            b'</EXPERIMENT_PACKAGE_SET>'
+        )
+
+        def raise_for_status(self):
+            return None
+
+    class Session:
+        def __init__(self):
+            self.headers = {}
+
+        def mount(self, *_args):
+            return None
+
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    client = NCBIGEOClient(session=Session())
+    records = client.fetch_sra_experiments(["SRX0000001"])
+    assert records["SRX0000001"]["instrument_model"] == "Illumina HiSeq 2500"
+    assert records["SRX0000001"]["biosample_accession"] == "SAMN00000001"
