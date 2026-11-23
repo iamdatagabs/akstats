@@ -5,6 +5,7 @@ from akstats.analysis import (
     cooccurrence_table,
     descriptive_maf,
     fisher_by_stage,
+    gene_level_maf,
     prepare_axis,
 )
 
@@ -45,3 +46,14 @@ def test_cooccurrence_is_patient_level():
     assert len(cooc) == 2
     assert bool(cooc.loc[cooc["Case"].eq("P01"), "AK_ARID2"].iloc[0])
     assert len(fisher_by_stage(cooc)) == 2
+
+
+def test_gene_level_maf_preserves_gene_and_module_levels():
+    panel, variants = fixtures()
+    axis = prepare_axis(panel, variants)
+    result = gene_level_maf(axis)
+    assert set(result["Gene"]) == {"ARID2", "HRAS"}
+    assert set(result.loc[result["Gene"].eq("ARID2"), "Module"]) == {"0. Chromatin (ARID2)"}
+    assert set(result.loc[result["Gene"].eq("HRAS"), "Module"]) == {"2. RAS GTPases"}
+    assert set(result["Stage"]) == {"Normal", "AK", "SCC"}
+    assert result.groupby(["Gene", "Stage"]).size().eq(1).all()
