@@ -43,7 +43,7 @@ print(status["status"], status["inference_status"])
 - `NCBI_EMAIL`: contact email included in Entrez requests.
 - `NCBI_API_KEY`: optional NCBI API key. It is not required for normal low-volume use.
 
-Do not commit API keys. Set them as environment variables or repository secrets. NCBI documents a default limit of 3 requests/second without a key and up to 10 requests/second with a key. The client makes a small number of cached requests and retries transient HTTP errors.
+Do not commit API keys. Set them as environment variables or repository secrets. NCBI documents a default limit of 3 requests/second without a key and up to 10 requests/second with a key. The client enforces the corresponding minimum interval between sequential E-utilities requests, caches bulk GEO files, and retries transient HTTP errors.
 
 ## Scientific safeguards
 

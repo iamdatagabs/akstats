@@ -628,7 +628,14 @@ def run_transcriptomics(
         summary.to_csv(output_dir / "geo_target_expression.csv", index=False)
         contrasts.to_csv(output_dir / "geo_target_contrasts.csv", index=False)
         status.update({
-            "status": "source_data_validated",
+            "status": "sample_accessions_and_integer_counts_reconciled",
+            "scientific_validation_status": "incomplete_design_and_source_metadata_conflicts",
+            "validation_scope": [
+                "GEO sample accession reconciliation",
+                "non-negative integer count validation",
+                "exact target-symbol matching",
+                "GEO/SRA/BioSample metadata retrieval",
+            ],
             "n_samples": int(counts.shape[1]),
             "n_features": int(counts.shape[0]),
             "n_target_genes": int(summary["Gene"].nunique()) if not summary.empty else 0,

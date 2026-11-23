@@ -82,3 +82,12 @@ def test_ncbi_client_fetches_sra_instrument_and_biosample_link():
     assert records["SRX0000001"]["instrument_model"] == "Illumina HiSeq 2500"
     assert records["SRX0000001"]["sra_sample_accession"] == "SRS00000001"
     assert records["SRX0000001"]["biosample_accession"] == "SAMN00000001"
+
+
+
+def test_ncbi_client_paces_entrez_requests_to_documented_limits(monkeypatch):
+    monkeypatch.delenv("NCBI_API_KEY", raising=False)
+    standard = NCBIGEOClient(api_key="")
+    keyed = NCBIGEOClient(api_key="test-key")
+    assert standard._eutils_interval == 1 / 3
+    assert keyed._eutils_interval == 1 / 10

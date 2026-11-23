@@ -132,7 +132,7 @@ def test_biosample_metadata_enriches_only_explicit_exposure_and_animal_fields():
     row = enriched.loc[enriched["sample_accession"].eq(accession)].iloc[0]
     assert row["animal_id"] == "07"
     assert pd.isna(row["exposure_group"])
-    assert row["exposure_metadata_conflict"] is True
+    assert bool(row["exposure_metadata_conflict"]) is True
     assert row["analysis_group"] == "Normal skin (exposure unknown)"
 
 
@@ -211,4 +211,4 @@ def test_biosample_can_supply_exposure_when_geo_soft_does_not():
     row = enriched.loc[enriched["sample_accession"].eq(accession)].iloc[0]
     assert row["exposure_group"] == "UVR"
     assert row["analysis_group"] == "Normal skin (UVR)"
-    assert row["exposure_metadata_conflict"] is False
+    assert bool(row["exposure_metadata_conflict"]) is False
