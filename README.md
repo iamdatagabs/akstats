@@ -90,7 +90,9 @@ Running `akstats` creates:
 | `outputs/patient_level_tests.csv` | Paired Friedman/Wilcoxon tests and exact McNemar tests |
 | `outputs/geo_transcriptomics_status.json` | NCBI retrieval, sample reconciliation, design and validation status for GSE158634 RNA-seq |
 | `outputs/geo_sample_metadata.csv` | Sample-level metadata parsed from the official GEO family SOFT file |
-| `outputs/geo_experimental_design.csv` | Animal-level repeated-measures audit; empty when animal IDs are not explicitly available |
+| `outputs/geo_experimental_design.csv` | Verified animal-level repeated-measures audit; empty when explicit animal IDs are unavailable |
+| `outputs/geo_publication_candidate_crosswalk.csv` | Provisional GEO-title-to-publication sample mapping for manual review only |
+| `outputs/geo_publication_candidate_design.csv` | Candidate UVR animal/lesion completeness audit; not used for inference |
 | `outputs/geo_sample_qc.csv` | Library size and detected-feature QC for the 20 GEO samples |
 | `outputs/geo_target_expression.csv` | Descriptive log2-CPM summaries for mapped ARID2–MAPK targets and Rora |
 | `outputs/geo_target_contrasts.csv` | Differences between stage medians; not differential-expression tests |
