@@ -280,8 +280,9 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
     else:
         build_status = "not_reported"
     platform_warning = (
-        "GEO platform GPL18480 is titled Illumina HiSeq 1500, while sample processing "
-        "text mentions HiSeq 2500; verify against the source publication."
+        "GEO platform GPL18480 and linked SRA records report Illumina HiSeq 1500; "
+        "sample processing text mentions HiSeq 2500, while the article methods report "
+        "NextSeq 500 (PMID 33664254). Verify the sequencing instrument before reuse."
         if "GPL18480" in platform_ids and any("2500" in item for item in instruments)
         else None
     )
@@ -292,6 +293,7 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
         ),
         "genome_build_consistency": build_status,
         "instrument_models_reported": instruments,
+        "publication_instrument_reported": "Illumina NextSeq 500 (PMID 33664254)",
         "platform_ids": platform_ids,
         "platform_instrument_warning": platform_warning,
     }
