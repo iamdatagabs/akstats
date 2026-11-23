@@ -639,8 +639,9 @@ def run_transcriptomics(
                 "NCBI sample metadata and integer count matrix were retrieved and reconciled. "
                 "The deposited SOFT records do not currently expose animal IDs or UVF/UVR labels "
                 "for each sample. The publication describes eight mice split between UVF and UVR, "
-                "but sample-to-animal links are not inferred from title order. Descriptive expression "
-                "only; no DE model is run until the animal-level design is explicitly reconstructed."
+                "but sample-to-animal links are not accepted from title order as verified metadata. "
+                "A separate provisional crosswalk is exported for review only. Descriptive expression "
+                "only; no DE model is run until the author-confirmed animal-level design is reconstructed."
             ),
         })
     except (NCBIError, OSError, ValueError, KeyError, TypeError, ImportError) as exc:
