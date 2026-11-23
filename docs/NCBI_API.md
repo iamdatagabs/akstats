@@ -8,7 +8,7 @@ AKStats retrieves GSE158634 from the official NCBI GEO distribution.
 2. `summarize_geo_series()` retrieves Entrez summaries with ESummary when a GEO DataSet UID is available.
 3. `fetch_series_soft()` downloads `GSE158634_family.soft.gz` from the GEO FTP directory. This file is the source of sample titles, characteristics, exposure labels, animal identifiers (when deposited), platform and processing notes.
 4. `fetch_count_matrix()` downloads `GSE158634_3.count.csv.gz`, the supplementary count matrix.
-5. Linked SRA experiments (when present in GEO sample relations) are retrieved through EFetch (`db=sra`) to inspect instrument models and BioSample links.
+5. Linked SRA experiments (when present in GEO sample relations) are retrieved through EFetch (`db=sra`) to inspect instrument models, SRA sample accessions (`SRS`) and external BioSample accessions (`SAMN`). These identifier types are stored separately.
 6. Linked BioSample accessions are enriched through EFetch (`db=biosample`) to recover explicit animal/treatment attributes.
 7. `transcriptomics.run_transcriptomics()` reconciles the sample accessions, checks non-negative integer counts, exports sample-level QC and builds an animal-level design audit.
 
