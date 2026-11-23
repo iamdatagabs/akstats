@@ -2,13 +2,13 @@
 import pandas as pd
 
 from akstats.transcriptomics import (
+    _metadata_consistency,
     EXPECTED_SAMPLES,
     experimental_design,
     load_geo_counts,
-    parse_geo_family_soft,
     merge_biosample_metadata,
     merge_sra_metadata,
-    _metadata_consistency,
+    parse_geo_family_soft,
     summarize_geo_counts,
 )
 
