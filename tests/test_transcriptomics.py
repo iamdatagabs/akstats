@@ -44,7 +44,7 @@ def _soft_fixture(include_animals=True):
         ])
         if include_animals and animal is not None:
             lines.append(f"!Sample_characteristics_ch1 = animal_id: Mouse {animal:02}")
-        lines.append("!Sample_relation = BioSample: SAMN00000001")
+        lines.append(f"!Sample_relation = BioSample: SAMN000000{len(lines):02}")
         lines.append("!Sample_platform_id = GPL18480")
     return "\n".join(lines) + "\n"
 
