@@ -531,7 +531,7 @@ def run_transcriptomics(
                 "only; no DE model is run until the animal-level design is explicitly reconstructed."
             ),
         })
-    except NCBIError as exc:
+    except (NCBIError, OSError, ValueError, KeyError, TypeError, ImportError) as exc:
         LOGGER.exception("GSE158634 NCBI integration failed")
         status.update({
             "status": "retrieval_or_validation_failed",
