@@ -78,6 +78,8 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         f"- Genome builds mentioned: **{', '.join(geo_status.get('genome_builds_detected', [])) or 'none detected'}**",
         f"- Linked SRA experiments retrieved: **{geo_status.get('n_sra_experiments_retrieved', 0)}**",
         f"- Linked BioSamples retrieved: **{geo_status.get('n_biosample_records', 0)}**",
+        f"- Exposure metadata conflicts: **{geo_status.get('n_exposure_metadata_conflicts', 0)}**",
+        f"- Animal-ID metadata conflicts: **{geo_status.get('n_animal_id_metadata_conflicts', 0)}**",
         f"- SRA instrument models: **{', '.join(geo_status.get('sra_instrument_models', [])) or 'not available'}**", "",
         geo_status.get("platform_instrument_warning") or "",
         geo_status.get("notice", "No transcriptomic inference was performed."), "",
