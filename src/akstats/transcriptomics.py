@@ -96,9 +96,9 @@ def parse_geo_family_soft(text: str) -> tuple[pd.DataFrame, dict[str, Any]]:
             exposure = _exposure_from_characteristics(characteristics)
             animal_id = _animal_from_characteristics(characteristics)
             biosample_match = next((
-                re.search(r"BioSample:\\s*(SAMN\\d+)", relation, re.IGNORECASE)
+                re.search(r"BioSample:\s*(SAMN\d+)", relation, re.IGNORECASE)
                 for relation in current.get("relations", [])
-                if re.search(r"BioSample:\\s*(SAMN\\d+)", relation, re.IGNORECASE)
+                if re.search(r"BioSample:\s*(SAMN\d+)", relation, re.IGNORECASE)
             ), None)
             if stage == "Normal skin" and exposure:
                 analysis_group = f"Normal skin ({exposure})"
@@ -214,12 +214,12 @@ def _metadata_consistency(metadata: pd.DataFrame) -> dict[str, Any]:
     """Surface conflicting genome-build and sequencing-instrument statements."""
     processing = " ".join(metadata.get("data_processing", pd.Series(dtype=str)).dropna().astype(str))
     builds = sorted(set(re.findall(
-        r"\\b(?:mm\\d+|GRCm\\d+|hg\\d+|GRCh\\d+)\\b",
+        r"\b(?:mm\d+|GRCm\d+|hg\d+|GRCh\d+)\b",
         processing,
         re.IGNORECASE,
     )))
     instruments = sorted(set(re.findall(
-        r"\\b(?:HiSeq|NextSeq|NovaSeq)\\s*\\d+",
+        r"\b(?:HiSeq|NextSeq|NovaSeq)\s*\d+",
         processing,
         re.IGNORECASE,
     )))
