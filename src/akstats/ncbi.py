@@ -133,6 +133,52 @@ class NCBIGEOClient:
         """Download the deposited integer gene-count matrix."""
         return self.download(GEO_COUNTS_URL, destination)
 
+    def fetch_sra_experiments(self, accessions: list[str]) -> dict[str, dict[str, Any]]:
+        """Retrieve linked SRA experiment metadata, including instrument and BioSample IDs."""
+        unique = sorted(set(accessions))
+        if not unique:
+            return {}
+        response = self._get(
+            f"{EUTILS_BASE}/efetch.fcgi",
+            self._eutils_params({
+                "db": "sra",
+                "id": ",".join(unique),
+                "retmode": "xml",
+            }),
+        )
+        try:
+            root = ElementTree.fromstring(response.content)
+        except ElementTree.ParseError as exc:
+            raise NCBIError("NCBI SRA EFetch returned invalid XML.") from exc
+        records: dict[str, dict[str, Any]] = {}
+        for package in root.iter():
+            if not package.tag.endswith("EXPERIMENT_PACKAGE"):
+                continue
+            experiment = next(
+                (node for node in package.iter() if node.tag.endswith("EXPERIMENT")),
+                None,
+            )
+            if experiment is None:
+                continue
+            accession = experiment.attrib.get("accession")
+            if not accession:
+                continue
+            instrument = next(
+                ((node.text or "").strip() for node in experiment.iter()
+                 if node.tag.endswith("INSTRUMENT_MODEL")),
+                None,
+            )
+            sample = next(
+                (node for node in package.iter() if node.tag.endswith("SAMPLE")),
+                None,
+            )
+            records[accession] = {
+                "accession": accession,
+                "instrument_model": instrument,
+                "biosample_accession": sample.attrib.get("accession") if sample is not None else None,
+            }
+        return records
+
     def fetch_biosample_records(self, accessions: list[str]) -> dict[str, dict[str, Any]]:
         """Retrieve linked BioSample records and their explicit attributes in one EFetch call."""
         unique = sorted(set(accessions))
