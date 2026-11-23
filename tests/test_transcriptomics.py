@@ -2,8 +2,8 @@
 import pandas as pd
 
 from akstats.transcriptomics import (
-    _metadata_consistency,
     EXPECTED_SAMPLES,
+    _metadata_consistency,
     experimental_design,
     load_geo_counts,
     merge_biosample_metadata,
