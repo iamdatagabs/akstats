@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from akstats.config import GENE_TO_MODULE, RAW_DIR
-from akstats.ncbi import NCBIGEOClient, read_gzip_text
+from akstats.ncbi import NCBIError, NCBIGEOClient, read_gzip_text
 
 LOGGER = logging.getLogger(__name__)
 GEO_COUNT_FILE = "GSE158634_3.count.csv.gz"
@@ -463,7 +463,7 @@ def run_transcriptomics(
         sra_error = None
         try:
             sra_records = client.fetch_sra_experiments(sra_ids)
-        except Exception as exc:
+        except NCBIError as exc:
             LOGGER.warning("Linked SRA enrichment unavailable: %s", exc)
             sra_records = {}
             sra_error = str(exc)
@@ -472,7 +472,7 @@ def run_transcriptomics(
         biosample_error = None
         try:
             biosample_records = client.fetch_biosample_records(biosample_ids)
-        except Exception as exc:
+        except NCBIError as exc:
             LOGGER.warning("Linked BioSample enrichment unavailable: %s", exc)
             biosample_records = {}
             biosample_error = str(exc)
@@ -531,7 +531,7 @@ def run_transcriptomics(
                 "only; no DE model is run until the animal-level design is explicitly reconstructed."
             ),
         })
-    except Exception as exc:
+    except NCBIError as exc:
         LOGGER.exception("GSE158634 NCBI integration failed")
         status.update({
             "status": "retrieval_or_validation_failed",
