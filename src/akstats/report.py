@@ -82,6 +82,7 @@ def export_research_products(output_dir: Path, panel: pd.DataFrame, variants: pd
         f"- Exposure metadata conflicts: **{geo_status.get('n_exposure_metadata_conflicts', 0)}**",
         f"- Animal-ID metadata conflicts: **{geo_status.get('n_animal_id_metadata_conflicts', 0)}**",
         f"- SRA instrument models: **{', '.join(geo_status.get('sra_instrument_models', [])) or 'not available'}**", "",
+        f"- Instrument reported by article: **{geo_status.get('publication_instrument_reported', 'not reported')}**",
         geo_status.get("platform_instrument_warning") or "",
         geo_status.get("notice", "No transcriptomic inference was performed."), "",
         "### GEO sample metadata", "",
