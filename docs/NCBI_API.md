@@ -55,7 +55,7 @@ Do not commit API keys. Set them as environment variables or repository secrets.
 - No sample is removed solely because its library-size QC flag is raised.
 - Gene-symbol mapping is exact and case-insensitive. Ensembl identifiers are not guessed.
 - Genome assembly and annotation release are audited across source statements. The current SOFT processing text mentions both hg19 and mm9; this conflict is surfaced and must not be silently resolved.
-- GPL18480 is labelled HiSeq 1500, while a sample processing note mentions HiSeq 2500. Verify this platform/instrument discrepancy against the publication.
+- GEO/SRA report HiSeq 1500, the SOFT processing note mentions HiSeq 2500, and the article methods report NextSeq 500 (PMID 33664254). Verify this three-way instrument discrepancy before reuse.
 - The current implementation reports descriptive log2-CPM summaries only. Inferential differential-expression modeling remains blocked until the animal-level design is reconstructed and reviewed.
 
 ## NCBI references
