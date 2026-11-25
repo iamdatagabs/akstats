@@ -6,7 +6,7 @@ AKStats converts the original Colab analysis into a modular Python package and p
 
 > **Research-use notice:** this repository is not a diagnostic tool, clinical decision-support system, or validated prognostic model. Results are exploratory and require interpretation alongside the source publication, study design, assay limitations, and independent biological evidence.
 
-## Research portal
+**Portfolio:** [Gabriel Passos — Engineering Portfolio](https://iamdatagabs.github.io/iamdatagabs/portfolio/) · **Source:** [GitHub](https://github.com/iamdatagabs/akstats)\n\n## Research portal
 
 The AKStats portal is organized into two connected pages, published through GitHub Pages:
 
